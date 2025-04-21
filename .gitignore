@@ -35,3 +35,4 @@ pids
 .DS_Store
 dist/
 /node_modules
+/output

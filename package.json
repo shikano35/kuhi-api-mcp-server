@@ -5,6 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
+    "start": "tsx src/index.ts",
     "build": "tsc && chmod 755 dist/index.js",
     "clean": "rm -rf dist/*",
     "lint": "biome lint --write .",
@@ -19,9 +20,15 @@
     "type": "git",
     "url": "git@github.com:shikano35/kuhi-api-mcp-server.git"
   },
-  "keywords": ["kuhi", "haikuMonuments", "mcp"],
+  "keywords": [
+    "kuhi",
+    "haikuMonuments",
+    "mcp"
+  ],
   "module": "./dist/index.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "packageManager": "pnpm@10.7.1",
   "dependencies": {
@@ -32,6 +39,7 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@types/node": "^22.14.1",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   }
 }
