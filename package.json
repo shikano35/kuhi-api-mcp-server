@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx src/index.ts output/haiku_monuments.geojson",
     "build": "tsc && chmod 755 dist/index.js",
     "clean": "rm -rf dist/*",
     "lint": "biome lint --write .",
