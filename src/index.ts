@@ -111,19 +111,19 @@ async function generateGeoJSONFile(outputPath: string): Promise<void> {
   }
 }
 
-async function searchHaikuMonumentByText(text: string): Promise<HaikuMonument | null> {
-  const response = await fetch(`${API_BASE_URL}/haiku-monuments`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch haiku monuments");
-  }
-  const data = (await response.json()) as HaikuMonumentResponse;
+// async function searchHaikuMonumentByText(text: string): Promise<HaikuMonument | null> {
+//   const response = await fetch(`${API_BASE_URL}/haiku-monuments`);
+//   if (!response.ok) {
+//     throw new Error("Failed to fetch haiku monuments");
+//   }
+//   const data = (await response.json()) as HaikuMonumentResponse;
   
-  const monument = data.haiku_monuments.find(
-    (monument) => monument.text.includes(text) || text.includes(monument.text)
-  );
+//   const monument = data.haiku_monuments.find(
+//     (monument) => monument.text.includes(text) || text.includes(monument.text)
+//   );
   
-  return monument || null;
-}
+//   return monument || null;
+// }
 
 server.tool(
   "get_haiku_monuments",
@@ -180,37 +180,37 @@ server.tool(
   },
 );
 
-server.tool(
-  "search_haiku_monument_image",
-  "指定された俳句が刻まれている句碑の画像を表示",
-  { text: z.string().describe("俳句のテキスト") },
-  async ({ text }) => {
-    const monument = await searchHaikuMonumentByText(text);
-    if (!monument) {
-      return { content: [{ type: "text", text: "指定された俳句の句碑が見つかりませんでした。" }] };
-    }
+// server.tool(
+//   "search_haiku_monument_image",
+//   "指定された俳句が刻まれている句碑の画像を表示",
+//   { text: z.string().describe("俳句のテキスト") },
+//   async ({ text }) => {
+//     const monument = await searchHaikuMonumentByText(text);
+//     if (!monument) {
+//       return { content: [{ type: "text", text: "指定された俳句の句碑が見つかりませんでした。" }] };
+//     }
     
-    if (!monument.image_url) {
-      return { content: [{ type: "text", text: "この句碑の画像は登録されていません。" }] };
-    }
+//     if (!monument.image_url) {
+//       return { content: [{ type: "text", text: "この句碑の画像は登録されていません。" }] };
+//     }
     
-    const imageResponse = await fetch(monument.image_url);
-    if (!imageResponse.ok) {
-      return { content: [{ type: "text", text: "画像の取得に失敗しました。" }] };
-    }
+//     const imageResponse = await fetch(monument.image_url);
+//     if (!imageResponse.ok) {
+//       return { content: [{ type: "text", text: "画像の取得に失敗しました。" }] };
+//     }
     
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-    const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+//     const imageBuffer = await imageResponse.arrayBuffer();
+//     const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+//     const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
     
-    return {
-      content: [
-        { type: "text", text: `句碑の情報:\n俳句: ${monument.text}\n作者: ${monument.poets[0]?.name || "不明"}\n場所: ${monument.locations[0]?.name || "不明"}` },
-        { type: "image", data: imageBase64, mimeType }
-      ]
-    };
-  },
-);
+//     return {
+//       content: [
+//         { type: "text", text: `句碑の情報:\n俳句: ${monument.text}\n作者: ${monument.poets[0]?.name || "不明"}\n場所: ${monument.locations[0]?.name || "不明"}` },
+//         { type: "image", data: imageBase64, mimeType }
+//       ]
+//     };
+//   },
+// );
 
 async function main() {
   const transport = new StdioServerTransport();
