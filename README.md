@@ -2,6 +2,8 @@
 
 AI Agent から[句碑データベース](https://github.com/shikano35/haiku_monument_api)を参照するための[MCP Server](http://modelcontextprotocol.io/specification)
 
+<br>
+
 > [!NOTE]
 > 現在プレリリース版（β 版）として公開中です。
 > 実験的な段階のため、仕様は今後変更される可能性があります。
