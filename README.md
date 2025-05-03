@@ -34,7 +34,7 @@ AI Agent から[句碑データベース](https://github.com/shikano35/haiku_mon
 
 <br>
 
-## インストール
+## install
 
 1. `pnpm install`
 
