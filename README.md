@@ -179,6 +179,21 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
    **Cursor の場合:**
    `.cursor/mcp.json` に以下を追加:
 
+   **方法 1: npx を使用（推奨）**
+
+   ```json
+   {
+     "mcpServers": {
+       "kuhi-api-mcp-server": {
+         "command": "npx",
+         "args": ["kuhi-api-mcp-server"]
+       }
+     }
+   }
+   ```
+
+   **方法 2: ローカルビルドを使用**
+
    ```json
    {
      "mcpServers": {
@@ -190,7 +205,7 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
    }
    ```
 
-   > **注意:** `/path/to/kuhi-api-mcp-server` は実際のプロジェクトパスに置き換えてください。
+   > **注意:** 方法 2 の場合、`/path/to/kuhi-api-mcp-server` は実際のプロジェクトパスに置き換えてください。
 
 ## 開発
 
