@@ -1,19 +1,20 @@
 {
   "name": "kuhi-api-mcp-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "句碑APIのMCPサーバー",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "./dist/index.js",
   "scripts": {
-    "start": "tsx src/index.ts output/haiku_monuments.geojson",
+    "start": "node ./dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && chmod 755 dist/index.js",
+    "build": "tsc && chmod +x dist/index.js",
     "clean": "rm -rf dist/*",
     "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome check --write .",
-    "check": "biome check"
+    "check": "biome check",
+    "prepublishOnly": "npm run build"
   },
   "bin": {
     "kuhi-api-mcp-server": "./dist/index.js"
