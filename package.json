@@ -1,13 +1,15 @@
 {
   "name": "kuhi-api-mcp-server",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "句碑APIのMCPサーバー",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "start": "tsx src/index.ts output/haiku_monuments.geojson",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc && chmod 755 dist/index.js",
     "clean": "rm -rf dist/*",
+    "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome check --write .",
@@ -21,18 +23,22 @@
     "url": "git@github.com:shikano35/kuhi-api-mcp-server.git"
   },
   "keywords": [
-    "kuhi",
-    "haikuMonuments",
-    "mcp"
+    "mcp",
+    "model-context-protocol",
+    "haiku",
+    "monuments",
+    "japanese-culture",
+    "poetry",
+    "api",
+    "kuhi"
   ],
   "module": "./dist/index.js",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "license": "MIT",
   "packageManager": "pnpm@10.7.1",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.1",
+    "@types/node-fetch": "^2.6.12",
     "node-fetch": "^3.3.2",
     "zod": "^3.24.3"
   },
