@@ -20,24 +20,32 @@ class Logger {
     return LOG_LEVELS[level] >= this.levelPriority;
   }
 
-  private formatMessage(level: LogLevel, message: string, args: readonly unknown[]): string {
+  private formatMessage(
+    level: LogLevel,
+    message: string,
+    args: readonly unknown[],
+  ): string {
     const timestamp = new Date().toISOString();
     const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
-    
+
     if (args.length === 0) {
       return `${prefix} ${message}\n`;
     }
-    
-    const formattedArgs = args.map(arg => 
-      typeof arg === 'string' ? arg : JSON.stringify(arg)
-    ).join(' ');
-    
+
+    const formattedArgs = args
+      .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+      .join(" ");
+
     return `${prefix} ${message} ${formattedArgs}\n`;
   }
 
-  private writeLog(level: LogLevel, message: string, args: readonly unknown[]): void {
+  private writeLog(
+    level: LogLevel,
+    message: string,
+    args: readonly unknown[],
+  ): void {
     if (!this.shouldLog(level)) return;
-    
+
     const formattedMessage = this.formatMessage(level, message, args);
     process.stderr.write(formattedMessage);
   }
@@ -60,6 +68,6 @@ class Logger {
 }
 
 export const logger = new Logger(
-   // biome-ignore lint/complexity/useLiteralKeys: TypeScriptのインデックスシグネチャ要件により必要
+  // biome-ignore lint/complexity/useLiteralKeys: TypeScriptのインデックスシグネチャ要件により必要
   (process.env["KUHI_LOG_LEVEL"] as LogLevel | undefined) ?? "warn",
 );

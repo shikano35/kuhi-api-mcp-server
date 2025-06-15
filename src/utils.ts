@@ -44,17 +44,17 @@ export function formatHaikuMonumentForDisplay(monument: HaikuMonument): string {
 季節: ${monument.season ?? "不明"}`;
 }
 
-export function formatStatisticsForDisplay(statistics: MonumentStatistics): string {
+export function formatStatisticsForDisplay(
+  statistics: MonumentStatistics,
+): string {
   const formatTopEntries = (entries: readonly [string, number][]): string => {
-    return entries
-      .map(([name, count]) => `  ${name}: ${count}基`)
-      .join("\n");
+    return entries.map(([name, count]) => `  ${name}: ${count}基`).join("\n");
   };
 
   const topPrefectures = Object.entries(statistics.byPrefecture)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
-    
+
   const topPoets = Object.entries(statistics.byPoet)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
@@ -79,19 +79,21 @@ ${formatTopEntries(regionEntries)}`;
 }
 
 export function validateCoordinates(lat: number, lon: number): boolean {
-  return lat >= COORDINATE_BOUNDS.LAT_MIN && 
-         lat <= COORDINATE_BOUNDS.LAT_MAX && 
-         lon >= COORDINATE_BOUNDS.LON_MIN && 
-         lon <= COORDINATE_BOUNDS.LON_MAX;
+  return (
+    lat >= COORDINATE_BOUNDS.LAT_MIN &&
+    lat <= COORDINATE_BOUNDS.LAT_MAX &&
+    lon >= COORDINATE_BOUNDS.LON_MIN &&
+    lon <= COORDINATE_BOUNDS.LON_MAX
+  );
 }
 
 export function formatDistance(meters: number): string {
   const METERS_PER_KM = 1000;
-  
+
   if (meters < METERS_PER_KM) {
     return `${Math.round(meters)}m`;
   }
-  
+
   return `${(meters / METERS_PER_KM).toFixed(1)}km`;
 }
 

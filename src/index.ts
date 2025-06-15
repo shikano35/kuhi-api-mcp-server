@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 
-import nodeFetch, { Headers as NodeHeaders, Request as NodeRequest, Response as NodeResponse } from "node-fetch";
+import nodeFetch, {
+  Headers as NodeHeaders,
+  Request as NodeRequest,
+  Response as NodeResponse,
+} from "node-fetch";
 
 function setupConsoleRedirection(): void {
   const redirectToStderr = (...args: readonly unknown[]): void => {
-    process.stderr.write(`${args.join(' ')}\n`);
+    process.stderr.write(`${args.join(" ")}\n`);
   };
-  
+
   console.log = redirectToStderr;
   console.warn = redirectToStderr;
   console.info = redirectToStderr;
 }
 
 function setupGlobalFetch(): void {
-  if (typeof globalThis.fetch === 'undefined') {
+  if (typeof globalThis.fetch === "undefined") {
     globalThis.fetch = nodeFetch as unknown as typeof globalThis.fetch;
     globalThis.Headers = NodeHeaders as unknown as typeof globalThis.Headers;
     globalThis.Request = NodeRequest as unknown as typeof globalThis.Request;
@@ -31,6 +35,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { CONFIG, ENDPOINTS } from "./config.js";
 import { logger } from "./logger.js";
+import {
+  HaikuMonumentResponseSchema,
+  HaikuMonumentSchema,
+  LocationSchema,
+  PoetSchema,
+  SourceSchema,
+} from "./schemas.js";
 import type {
   GeoJSONFeature,
   GeoJSONFeatureCollection,
@@ -40,13 +51,6 @@ import type {
   SearchOptions,
   Source,
 } from "./types.js";
-import {
-  HaikuMonumentResponseSchema,
-  HaikuMonumentSchema,
-  LocationSchema,
-  PoetSchema,
-  SourceSchema,
-} from "./schemas.js";
 import {
   formatHaikuMonumentForDisplay,
   formatStatisticsForDisplay,
@@ -71,7 +75,7 @@ let currentCacheSize = 0;
 
 function getCacheKey(url: string, params?: Record<string, unknown>): string {
   if (!params) return url;
-  
+
   try {
     const sortedParams: Record<string, unknown> = {};
     for (const key of Object.keys(params).sort()) {
@@ -132,7 +136,7 @@ function setCache<T>(key: string, data: T): void {
     size,
     lastAccessed: now,
   });
-  currentCacheSize += size;  
+  currentCacheSize += size;
 }
 
 interface ValidationMetrics {
@@ -182,7 +186,7 @@ async function fetchResource<T>(
     } catch (error) {
       validationMetrics.validationFailures += 1;
       validationMetrics.lastFailureAt = new Date();
-      validationMetrics.failuresByEndpoint[endpoint] = 
+      validationMetrics.failuresByEndpoint[endpoint] =
         (validationMetrics.failuresByEndpoint[endpoint] ?? 0) + 1;
 
       if (options.logValidationFailures !== false) {
@@ -193,7 +197,7 @@ async function fetchResource<T>(
           validationMetrics,
         });
       }
-      
+
       setCache(cacheKey, rawData as T);
       return rawData as T;
     }
@@ -212,13 +216,13 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
   try {
     const text = await response.text();
     if (!text.trim()) {
-      throw new Error('Empty response body');
+      throw new Error("Empty response body");
     }
-    
+
     return JSON.parse(text) as T;
   } catch (error) {
     throw new Error(
-      `Failed to parse response: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to parse response: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -235,7 +239,7 @@ async function fetchWithTimeout(
   if (signal) {
     const handleExternalAbort = () => controller.abort();
     signal.addEventListener("abort", handleExternalAbort);
-    
+
     if (signal.aborted) {
       controller.abort();
     }
@@ -244,12 +248,12 @@ async function fetchWithTimeout(
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, { 
+    const response = await fetch(url, {
       signal: combinedSignal,
       headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'kuhi-api-mcp-server/1.4.1'
-      }
+        Accept: "application/json",
+        "User-Agent": "kuhi-api-mcp-server/1.4.1",
+      },
     });
     clearTimeout(timeoutId);
     return response;
@@ -404,7 +408,9 @@ async function fetchHaikuMonumentsByPoet(
   return data.map(transformZodToHaikuMonument);
 }
 
-async function fetchSources(options?: Partial<SearchOptions>): Promise<Source[]> {
+async function fetchSources(
+  options?: Partial<SearchOptions>,
+): Promise<Source[]> {
   const params = options
     ? Object.fromEntries(
         Object.entries(options)
@@ -425,7 +431,9 @@ async function fetchSourceById(id: number): Promise<Source> {
   return await fetchResource(ENDPOINTS.SOURCES, SourceSchema, id);
 }
 
-async function fetchLocations(options?: Partial<SearchOptions>): Promise<Location[]> {
+async function fetchLocations(
+  options?: Partial<SearchOptions>,
+): Promise<Location[]> {
   const params = options
     ? Object.fromEntries(
         Object.entries(options)
@@ -653,16 +661,19 @@ function validateNumberInput(
 }
 
 // 監視・ヘルスチェック関数
-function getValidationMetrics(): ValidationMetrics & { 
+function getValidationMetrics(): ValidationMetrics & {
   successRate: number;
   isHealthy: boolean;
 } {
-  const successRate = validationMetrics.totalRequests > 0 
-    ? (validationMetrics.totalRequests - validationMetrics.validationFailures) / validationMetrics.totalRequests 
-    : 1.0;
-  
+  const successRate =
+    validationMetrics.totalRequests > 0
+      ? (validationMetrics.totalRequests -
+          validationMetrics.validationFailures) /
+        validationMetrics.totalRequests
+      : 1.0;
+
   const isHealthy = successRate >= 0.95;
-  
+
   return {
     ...validationMetrics,
     successRate,
@@ -672,7 +683,7 @@ function getValidationMetrics(): ValidationMetrics & {
 
 function logValidationHealth(): void {
   const metrics = getValidationMetrics();
-  
+
   if (!metrics.isHealthy) {
     logger.error("Validation health check failed", metrics);
   } else {
@@ -696,7 +707,7 @@ server.tool(
       .describe("取得件数（デフォルト: 50）"),
     offset: z.number().optional().default(0).describe("取得開始位置"),
   },
-async ({ limit = CONFIG.DEFAULT_LIMIT, offset = 0 }) => {
+  async ({ limit = CONFIG.DEFAULT_LIMIT, offset = 0 }) => {
     const searchOptions: SearchOptions = { limit, offset };
     const data = await searchHaikuMonuments(searchOptions);
     return {
@@ -749,16 +760,18 @@ server.tool(
     const searchOptions: SearchOptions = Object.fromEntries(
       Object.entries(options)
         .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => [key, value])
+        .map(([key, value]) => [key, value]),
     ) as SearchOptions;
-    
+
     const data = await searchHaikuMonuments(searchOptions);
-    const formatted = data.map(formatHaikuMonumentForDisplay).join('\n\n');
-    return { 
-      content: [{ 
-        type: "text", 
-        text: `検索結果（${data.length}件）:\n\n${formatted}` 
-      }] 
+    const formatted = data.map(formatHaikuMonumentForDisplay).join("\n\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text: `検索結果（${data.length}件）:\n\n${formatted}`,
+        },
+      ],
     };
   },
 );
@@ -773,7 +786,7 @@ server.tool(
   },
   async (options) => {
     const filteredOptions = Object.fromEntries(
-      Object.entries(options).filter(([, value]) => value !== undefined)
+      Object.entries(options).filter(([, value]) => value !== undefined),
     );
     const data = await fetchPoets(filteredOptions);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
@@ -807,9 +820,9 @@ server.tool(
     title_contains: z.string().optional().describe("タイトルに含まれる文字列"),
     limit: z.number().optional().describe("取得件数"),
   },
-   async (options) => {
+  async (options) => {
     const filteredOptions = Object.fromEntries(
-      Object.entries(options).filter(([, value]) => value !== undefined)
+      Object.entries(options).filter(([, value]) => value !== undefined),
     );
     const data = await fetchSources(filteredOptions);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
@@ -836,7 +849,7 @@ server.tool(
   },
   async (options) => {
     const filteredOptions = Object.fromEntries(
-      Object.entries(options).filter(([, value]) => value !== undefined)
+      Object.entries(options).filter(([, value]) => value !== undefined),
     );
     const data = await fetchLocations(filteredOptions);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
@@ -857,14 +870,16 @@ server.tool(
   "get_haiku_monuments_by_region",
   "指定された地域の句碑を表示",
   { region: z.string().describe("地域名") },
-   async ({ region }) => {
+  async ({ region }) => {
     const data = await fetchHaikuMonumentsByRegion(region);
-    const formatted = data.map(formatHaikuMonumentForDisplay).join('\n\n');
-    return { 
-      content: [{ 
-        type: "text", 
-        text: `${region}地域の句碑（${data.length}件）:\n\n${formatted}` 
-      }] 
+    const formatted = data.map(formatHaikuMonumentForDisplay).join("\n\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${region}地域の句碑（${data.length}件）:\n\n${formatted}`,
+        },
+      ],
     };
   },
 );
@@ -875,11 +890,13 @@ server.tool(
   { prefecture: z.string().describe("県名") },
   async ({ prefecture }) => {
     const count = await countHaikuMonumentsByPrefecture(prefecture);
-    return { 
-      content: [{ 
-        type: "text", 
-        text: `${prefecture}の句碑数: ${count}基` 
-      }] 
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${prefecture}の句碑数: ${count}基`,
+        },
+      ],
     };
   },
 );
@@ -935,7 +952,7 @@ server.tool(
     searchText: z.string().describe("検索テキスト"),
     limit: z.number().optional().describe("取得件数"),
   },
-   async ({ searchText, limit }) => {
+  async ({ searchText, limit }) => {
     const data = await findSimilarMonuments(searchText, limit);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
   },
@@ -955,7 +972,9 @@ server.tool(
 );
 
 // 型変換ヘルパー関数
-function transformZodToHaikuMonument(zodData: z.infer<typeof HaikuMonumentSchema>): HaikuMonument {
+function transformZodToHaikuMonument(
+  zodData: z.infer<typeof HaikuMonumentSchema>,
+): HaikuMonument {
   return {
     ...zodData,
     commentary: zodData.commentary ?? null,
@@ -976,13 +995,13 @@ function transformZodToHaikuMonument(zodData: z.infer<typeof HaikuMonumentSchema
     photographer: zodData.photographer ?? null,
     model_3d_url: zodData.model_3d_url ?? null,
     remarks: zodData.remarks ?? null,
-    poets: zodData.poets.map(poet => ({
+    poets: zodData.poets.map((poet) => ({
       ...poet,
       biography: poet.biography ?? null,
       link_url: poet.link_url ?? null,
       image_url: poet.image_url ?? null,
     })),
-    locations: zodData.locations.map(location => ({
+    locations: zodData.locations.map((location) => ({
       ...location,
       municipality: location.municipality ?? null,
       place_name: location.place_name ?? null,
@@ -990,7 +1009,9 @@ function transformZodToHaikuMonument(zodData: z.infer<typeof HaikuMonumentSchema
   } as HaikuMonument;
 }
 
-function transformZodToLocation(zodData: z.infer<typeof LocationSchema>): Location {
+function transformZodToLocation(
+  zodData: z.infer<typeof LocationSchema>,
+): Location {
   return {
     ...zodData,
     municipality: zodData.municipality ?? null,

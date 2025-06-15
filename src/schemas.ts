@@ -44,8 +44,14 @@ const LocationEmbeddedSchema = z.object({
   municipality: z.string().nullable().optional(),
   address: z.string(),
   place_name: z.string().nullable().optional(),
-  latitude: z.number().min(VALIDATION_LIMITS.LAT_MIN).max(VALIDATION_LIMITS.LAT_MAX),
-  longitude: z.number().min(VALIDATION_LIMITS.LON_MIN).max(VALIDATION_LIMITS.LON_MAX),
+  latitude: z
+    .number()
+    .min(VALIDATION_LIMITS.LAT_MIN)
+    .max(VALIDATION_LIMITS.LAT_MAX),
+  longitude: z
+    .number()
+    .min(VALIDATION_LIMITS.LON_MIN)
+    .max(VALIDATION_LIMITS.LON_MAX),
 });
 
 export const HaikuMonumentSchema = z.object({
@@ -88,17 +94,20 @@ export const SearchOptionsSchema = z.object({
   description_contains: z.string().optional(),
   name_contains: z.string().optional(),
   biography_contains: z.string().optional(),
-  limit: z.number()
+  limit: z
+    .number()
     .int()
     .min(VALIDATION_LIMITS.MIN_LIMIT)
     .max(VALIDATION_LIMITS.MAX_LIMIT)
     .optional(),
   offset: z.number().int().min(VALIDATION_LIMITS.MIN_OFFSET).optional(),
-  lat: z.number()
+  lat: z
+    .number()
     .min(VALIDATION_LIMITS.LAT_MIN)
     .max(VALIDATION_LIMITS.LAT_MAX)
     .optional(),
-  lon: z.number()
+  lon: z
+    .number()
     .min(VALIDATION_LIMITS.LON_MIN)
     .max(VALIDATION_LIMITS.LON_MAX)
     .optional(),
@@ -118,7 +127,6 @@ export const RegionEnum = z.enum([
   "九州",
   "沖縄",
 ]);
-
 
 export const PoetSchema = PoetEmbeddedSchema;
 
