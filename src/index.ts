@@ -55,7 +55,7 @@ import {
 
 const server = new McpServer({
   name: "kuhi-api-mcp-server",
-  version: "1.4.1",
+  version: "1.4.2",
 });
 
 interface CacheEntry<T> {
