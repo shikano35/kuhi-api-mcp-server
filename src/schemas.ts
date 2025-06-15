@@ -27,35 +27,41 @@ export const HaikuMonumentSchema = z.object({
   poet_id: z.number(),
   source_id: z.number(),
   location_id: z.number(),
-  poets: z.array(z.object({
-    id: z.number(),
-    name: z.string(),
-    biography: z.string(),
-    link_url: z.string(),
-    image_url: z.string(),
-    created_at: z.string(),
-    updated_at: z.string(),
-  })),
-  sources: z.array(z.object({
-    id: z.number(),
-    title: z.string(),
-    author: z.string(),
-    publisher: z.string(),
-    source_year: z.number(),
-    url: z.string(),
-    created_at: z.string(),
-    updated_at: z.string(),
-  })),
-  locations: z.array(z.object({
-    id: z.number(),
-    region: z.string(),
-    prefecture: z.string(),
-    municipality: z.string().optional(),
-    address: z.string(),
-    place_name: z.string().optional(),
-    latitude: z.number(),
-    longitude: z.number(),
-  })),
+  poets: z.array(
+    z.object({
+      id: z.number(),
+      name: z.string(),
+      biography: z.string(),
+      link_url: z.string(),
+      image_url: z.string(),
+      created_at: z.string(),
+      updated_at: z.string(),
+    }),
+  ),
+  sources: z.array(
+    z.object({
+      id: z.number(),
+      title: z.string(),
+      author: z.string(),
+      publisher: z.string(),
+      source_year: z.number(),
+      url: z.string(),
+      created_at: z.string(),
+      updated_at: z.string(),
+    }),
+  ),
+  locations: z.array(
+    z.object({
+      id: z.number(),
+      region: z.string(),
+      prefecture: z.string(),
+      municipality: z.string().optional(),
+      address: z.string(),
+      place_name: z.string().optional(),
+      latitude: z.number(),
+      longitude: z.number(),
+    }),
+  ),
 });
 
 export const SearchOptionsSchema = z.object({
@@ -77,5 +83,14 @@ export const SearchOptionsSchema = z.object({
 
 export const SeasonEnum = z.enum(["春", "夏", "秋", "冬"]);
 export const RegionEnum = z.enum([
-  "北海道", "東北", "関東甲信", "東海", "北陸", "近畿", "中国", "四国", "九州", "沖縄"
+  "北海道",
+  "東北",
+  "関東甲信",
+  "東海",
+  "北陸",
+  "近畿",
+  "中国",
+  "四国",
+  "九州",
+  "沖縄",
 ]);

@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import fetch, { type Response } from "node-fetch";
 import { z } from "zod";
+import { CONFIG, ENDPOINTS } from "./config.js";
 import type {
   GeoJSONFeature,
   GeoJSONFeatureCollection,
@@ -14,13 +15,16 @@ import type {
   SearchOptions,
   Source,
 } from "./types.js";
+import {
+  formatHaikuMonumentForDisplay,
+  formatStatisticsForDisplay,
+  validateCoordinates,
+} from "./utils.js";
 
 const server = new McpServer({
   name: "kuhi-api-mcp-server",
-  version: "1.0.0",
+  version: "1.0.1",
 });
-
-const API_BASE_URL = "https://api.kuhiapi.com";
 
 // エラーハンドリング用のヘルパー関数
 async function handleApiResponse<T>(response: Response): Promise<T> {
@@ -32,7 +36,32 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
   try {
     return (await response.json()) as T;
   } catch (error) {
-    throw new Error(`Failed to parse JSON response: ${error}`);
+    throw new Error(
+      `Failed to parse JSON response: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+// タイムアウト付きfetch
+async function fetchWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    CONFIG.REQUEST_TIMEOUT,
+  );
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timeout after ${CONFIG.REQUEST_TIMEOUT}ms`);
+    }
+    throw error;
   }
 }
 
@@ -71,25 +100,26 @@ function buildSearchQuery(options: SearchOptions): string {
 }
 
 async function fetchHaikuMonuments(): Promise<HaikuMonument[]> {
-  const response = await fetch(`${API_BASE_URL}/haiku-monuments`);
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}`,
+  );
   const data = await handleApiResponse<HaikuMonumentResponse>(response);
   return data.haiku_monuments;
 }
 
 async function fetchHaikuMonumentById(id: number): Promise<HaikuMonument> {
-  const response = await fetch(`${API_BASE_URL}/haiku-monuments/${id}`);
-  const data = await handleApiResponse<{ haiku_monument: HaikuMonument }>(
-    response,
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}/${id}`,
   );
-  return data.haiku_monument;
+  return await handleApiResponse<HaikuMonument>(response);
 }
 
 async function searchHaikuMonuments(
   options: SearchOptions,
 ): Promise<HaikuMonument[]> {
   const queryString = buildSearchQuery(options);
-  const response = await fetch(
-    `${API_BASE_URL}/haiku-monuments?${queryString}`,
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}?${queryString}`,
   );
   const data = await handleApiResponse<HaikuMonumentResponse>(response);
   return data.haiku_monuments;
@@ -98,22 +128,24 @@ async function searchHaikuMonuments(
 async function fetchPoets(options?: SearchOptions): Promise<Poet[]> {
   const queryString = options ? buildSearchQuery(options) : "";
   const url = queryString
-    ? `${API_BASE_URL}/poets?${queryString}`
-    : `${API_BASE_URL}/poets`;
-  const response = await fetch(url);
+    ? `${CONFIG.API_BASE_URL}${ENDPOINTS.POETS}?${queryString}`
+    : `${CONFIG.API_BASE_URL}${ENDPOINTS.POETS}`;
+  const response = await fetchWithTimeout(url);
   return await handleApiResponse<Poet[]>(response);
 }
 
 async function fetchPoetById(id: number): Promise<Poet> {
-  const response = await fetch(`${API_BASE_URL}/poets/${id}`);
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.POETS}/${id}`,
+  );
   return await handleApiResponse<Poet>(response);
 }
 
 async function fetchHaikuMonumentsByPoet(
   poetId: number,
 ): Promise<HaikuMonument[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/poets/${poetId}/haiku-monuments`,
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.POETS}/${poetId}${ENDPOINTS.HAIKU_MONUMENTS}`,
   );
   return await handleApiResponse<HaikuMonument[]>(response);
 }
@@ -121,36 +153,40 @@ async function fetchHaikuMonumentsByPoet(
 async function fetchSources(options?: SearchOptions): Promise<Source[]> {
   const queryString = options ? buildSearchQuery(options) : "";
   const url = queryString
-    ? `${API_BASE_URL}/sources?${queryString}`
-    : `${API_BASE_URL}/sources`;
-  const response = await fetch(url);
+    ? `${CONFIG.API_BASE_URL}${ENDPOINTS.SOURCES}?${queryString}`
+    : `${CONFIG.API_BASE_URL}${ENDPOINTS.SOURCES}`;
+  const response = await fetchWithTimeout(url);
   return await handleApiResponse<Source[]>(response);
 }
 
 async function fetchSourceById(id: number): Promise<Source> {
-  const response = await fetch(`${API_BASE_URL}/sources/${id}`);
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.SOURCES}/${id}`,
+  );
   return await handleApiResponse<Source>(response);
 }
 
 async function fetchLocations(options?: SearchOptions): Promise<Location[]> {
   const queryString = options ? buildSearchQuery(options) : "";
   const url = queryString
-    ? `${API_BASE_URL}/locations?${queryString}`
-    : `${API_BASE_URL}/locations`;
-  const response = await fetch(url);
+    ? `${CONFIG.API_BASE_URL}${ENDPOINTS.LOCATIONS}?${queryString}`
+    : `${CONFIG.API_BASE_URL}${ENDPOINTS.LOCATIONS}`;
+  const response = await fetchWithTimeout(url);
   return await handleApiResponse<Location[]>(response);
 }
 
 async function fetchLocationById(id: number): Promise<Location> {
-  const response = await fetch(`${API_BASE_URL}/locations/${id}`);
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.LOCATIONS}/${id}`,
+  );
   return await handleApiResponse<Location>(response);
 }
 
 async function fetchHaikuMonumentsByRegion(
   region: string,
 ): Promise<HaikuMonument[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/haiku-monuments?region=${encodeURIComponent(region)}`,
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}?region=${encodeURIComponent(region)}`,
   );
   const data = await handleApiResponse<HaikuMonumentResponse>(response);
   return data.haiku_monuments;
@@ -159,8 +195,8 @@ async function fetchHaikuMonumentsByRegion(
 async function countHaikuMonumentsByPrefecture(
   prefecture: string,
 ): Promise<number> {
-  const response = await fetch(
-    `${API_BASE_URL}/haiku-monuments?prefecture=${encodeURIComponent(prefecture)}`,
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}?prefecture=${encodeURIComponent(prefecture)}`,
   );
   const data = await handleApiResponse<HaikuMonumentResponse>(response);
   return data.haiku_monuments.length;
@@ -171,8 +207,17 @@ async function fetchHaikuMonumentsByCoordinates(
   lon: number,
   radius: number,
 ): Promise<HaikuMonument[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/haiku-monuments?lat=${lat}&lon=${lon}&radius=${radius}`,
+  if (!validateCoordinates(lat, lon)) {
+    throw new Error(
+      "Invalid coordinates: latitude must be between -90 and 90, longitude must be between -180 and 180",
+    );
+  }
+  if (radius <= 0) {
+    throw new Error("Invalid radius: radius must be greater than 0");
+  }
+
+  const response = await fetchWithTimeout(
+    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}?lat=${lat}&lon=${lon}&radius=${radius}`,
   );
   const data = await handleApiResponse<HaikuMonumentResponse>(response);
   return data.haiku_monuments;
@@ -308,10 +353,25 @@ async function getMonumentsBySeasonAndRegion(
 server.tool(
   "get_haiku_monuments",
   "句碑データベースに登録されているすべての句碑の情報を表示",
-  {},
-  async () => {
-    const data = await fetchHaikuMonuments();
-    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+  {
+    limit: z
+      .number()
+      .optional()
+      .default(CONFIG.DEFAULT_LIMIT)
+      .describe("取得件数（デフォルト: 50）"),
+    offset: z.number().optional().default(0).describe("取得開始位置"),
+  },
+  async ({ limit = CONFIG.DEFAULT_LIMIT, offset = 0 }) => {
+    const searchOptions: SearchOptions = { limit, offset };
+    const data = await searchHaikuMonuments(searchOptions);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `句碑データ（${data.length}件）:\n${JSON.stringify(data, null, 2)}`,
+        },
+      ],
+    };
   },
 );
 
@@ -321,7 +381,16 @@ server.tool(
   { id: z.number().describe("句碑ID") },
   async ({ id }) => {
     const data = await fetchHaikuMonumentById(id);
-    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+    const formatted = formatHaikuMonumentForDisplay(data);
+    return {
+      content: [
+        { type: "text", text: formatted },
+        {
+          type: "text",
+          text: `\n\n【詳細データ（JSON）】\n${JSON.stringify(data, null, 2)}`,
+        },
+      ],
+    };
   },
 );
 
@@ -478,7 +547,16 @@ server.tool(
   {},
   async () => {
     const statistics = await getHaikuMonumentsStatistics();
-    return { content: [{ type: "text", text: JSON.stringify(statistics) }] };
+    const formatted = formatStatisticsForDisplay(statistics);
+    return {
+      content: [
+        { type: "text", text: formatted },
+        {
+          type: "text",
+          text: `\n\n【詳細データ（JSON）】\n${JSON.stringify(statistics, null, 2)}`,
+        },
+      ],
+    };
   },
 );
 
