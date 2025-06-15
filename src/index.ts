@@ -1,4 +1,33 @@
 #!/usr/bin/env node
+
+import nodeFetch, {
+  Headers as NodeHeaders,
+  Request as NodeRequest,
+  Response as NodeResponse,
+} from "node-fetch";
+
+function setupConsoleRedirection(): void {
+  const redirectToStderr = (...args: readonly unknown[]): void => {
+    process.stderr.write(`${args.join(" ")}\n`);
+  };
+
+  console.log = redirectToStderr;
+  console.warn = redirectToStderr;
+  console.info = redirectToStderr;
+}
+
+function setupGlobalFetch(): void {
+  if (typeof globalThis.fetch === "undefined") {
+    globalThis.fetch = nodeFetch as unknown as typeof globalThis.fetch;
+    globalThis.Headers = NodeHeaders as unknown as typeof globalThis.Headers;
+    globalThis.Request = NodeRequest as unknown as typeof globalThis.Request;
+    globalThis.Response = NodeResponse as unknown as typeof globalThis.Response;
+  }
+}
+
+setupConsoleRedirection();
+setupGlobalFetch();
+
 import fs from "node:fs";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -17,7 +46,6 @@ import type {
   GeoJSONFeature,
   GeoJSONFeatureCollection,
   HaikuMonument,
-  HaikuMonumentResponse,
   Location,
   Poet,
   SearchOptions,
@@ -31,7 +59,7 @@ import {
 
 const server = new McpServer({
   name: "kuhi-api-mcp-server",
-  version: "1.4.1",
+  version: "1.4.2",
 });
 
 interface CacheEntry<T> {
@@ -45,70 +73,41 @@ const cache = new Map<string, CacheEntry<unknown>>();
 const CACHE_SIZE_LIMIT = 50 * 1024 * 1024;
 let currentCacheSize = 0;
 
-const cacheMetrics = {
-  hits: 0,
-  misses: 0,
-  evictions: 0,
-  totalRequests: 0,
-  get hitRate() {
-    return this.totalRequests > 0 ? this.hits / this.totalRequests : 0;
-  },
-  reset() {
-    this.hits = 0;
-    this.misses = 0;
-    this.evictions = 0;
-    this.totalRequests = 0;
-  },
-};
-
-/**
- * 安定したキャッシュキーを生成（オブジェクトキーをソートして文字列化）
- */
 function getCacheKey(url: string, params?: Record<string, unknown>): string {
   if (!params) return url;
-  const sortedParams: Record<string, unknown> = {};
-  for (const key of Object.keys(params).sort()) {
-    sortedParams[key] = params[key];
+
+  try {
+    const sortedParams: Record<string, unknown> = {};
+    for (const key of Object.keys(params).sort()) {
+      sortedParams[key] = params[key];
+    }
+    return `${url}:${JSON.stringify(sortedParams)}`;
+  } catch {
+    return url;
   }
-  return `${url}:${JSON.stringify(sortedParams)}`;
 }
 
-/**
- * キャッシュからデータを取得
- */
 function getFromCache<T>(key: string): T | null {
-  cacheMetrics.totalRequests++;
-
   const entry = cache.get(key) as CacheEntry<T> | undefined;
   if (!entry) {
-    cacheMetrics.misses++;
     return null;
   }
 
   if (Date.now() - entry.timestamp > CONFIG.CACHE_DURATION) {
     cache.delete(key);
     currentCacheSize -= entry.size;
-    cacheMetrics.misses++;
-    logger.debug(`Cache expired for key: ${key}`);
     return null;
   }
 
   entry.lastAccessed = Date.now();
-  cacheMetrics.hits++;
-  logger.debug(`Cache hit for key: ${key}`);
   return entry.data;
 }
 
-/**
- * データをキャッシュに保存
- */
 function setCache<T>(key: string, data: T): void {
   const dataStr = JSON.stringify(data);
   const size = Buffer.byteLength(dataStr, "utf8");
 
-  // サイズ制限チェック
   if (size > CACHE_SIZE_LIMIT / 10) {
-    logger.warn(`Data too large to cache (${size} bytes): ${key}`);
     return;
   }
 
@@ -128,8 +127,6 @@ function setCache<T>(key: string, data: T): void {
     const oldEntry = cache.get(oldestKey) as CacheEntry<unknown>;
     cache.delete(oldestKey);
     currentCacheSize -= oldEntry.size;
-    cacheMetrics.evictions++;
-    logger.debug(`Evicted cache entry: ${oldestKey}`);
   }
 
   const now = Date.now();
@@ -140,79 +137,93 @@ function setCache<T>(key: string, data: T): void {
     lastAccessed: now,
   });
   currentCacheSize += size;
-  logger.debug(`Cached data (${size} bytes): ${key}`);
 }
 
-/**
- * 共通のリソース取得関数（スキーマ検証とキャッシュ機能付き）
- */
+interface ValidationMetrics {
+  totalRequests: number;
+  validationFailures: number;
+  lastFailureAt: Date | null;
+  failuresByEndpoint: Record<string, number>;
+}
+
+const validationMetrics: ValidationMetrics = {
+  totalRequests: 0,
+  validationFailures: 0,
+  lastFailureAt: null,
+  failuresByEndpoint: {},
+};
+
+interface FetchResourceOptions {
+  skipValidation?: boolean;
+  logValidationFailures?: boolean;
+}
+
 async function fetchResource<T>(
   endpoint: string,
   schema?: z.ZodSchema<T>,
   id?: number | string,
   params?: Record<string, string>,
+  options: FetchResourceOptions = {},
 ): Promise<T> {
   const url = buildApiUrl(endpoint, id, params);
   const cacheKey = getCacheKey(url, params);
 
-  // キャッシュから取得を試行
   const cachedData = getFromCache<T>(cacheKey);
   if (cachedData) {
-    logger.debug(`Using cached data for: ${url}`);
     return cachedData;
   }
 
-  logger.debug(`Fetching data from: ${url}`);
   const response = await fetchWithRetry(url);
-  const data = await handleApiResponse<T>(response);
+  const rawData = await handleApiResponse<unknown>(response);
 
-  // スキーマ検証
-  if (schema) {
+  validationMetrics.totalRequests += 1;
+
+  if (schema && !options.skipValidation) {
     try {
-      const validatedData = schema.parse(data);
+      const validatedData = schema.parse(rawData) as T;
       setCache(cacheKey, validatedData);
-      logger.debug(`Schema validation passed for: ${url}`);
       return validatedData;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      validationMetrics.validationFailures += 1;
+      validationMetrics.lastFailureAt = new Date();
+      validationMetrics.failuresByEndpoint[endpoint] =
+        (validationMetrics.failuresByEndpoint[endpoint] ?? 0) + 1;
 
-      logger.warn(`Schema validation failed for ${url}:`, {
-        error: errorMessage,
-        endpoint,
-      });
+      if (options.logValidationFailures !== false) {
+        logger.warn("Schema validation failed for external API response", {
+          endpoint,
+          url,
+          error: error instanceof Error ? error.message : String(error),
+          validationMetrics,
+        });
+      }
 
-      setCache(cacheKey, data);
-      return data;
+      setCache(cacheKey, rawData as T);
+      return rawData as T;
     }
   }
 
-  setCache(cacheKey, data);
-  return data;
+  setCache(cacheKey, rawData as T);
+  return rawData as T;
 }
 
-/**
- * エラーハンドリング用のヘルパー関数
- */
 async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
-    const error = new Error(`API Error (${response.status}): ${errorText}`);
-    logger.error(`API request failed: ${response.url}`, {
-      status: response.status,
-      error: errorText,
-    });
-    throw error;
+    throw new Error(`API Error (${response.status}): ${errorText}`);
   }
 
   try {
-    return (await response.json()) as T;
+    const text = await response.text();
+    if (!text.trim()) {
+      throw new Error("Empty response body");
+    }
+
+    return JSON.parse(text) as T;
   } catch (error) {
-    const jsonError = new Error(
-      `Failed to parse JSON response: ${error instanceof Error ? error.message : String(error)}`,
+    throw new Error(
+      `Failed to parse response: ${error instanceof Error ? error.message : String(error)}`,
     );
-    logger.error(`JSON parsing failed for: ${response.url}`, error);
-    throw jsonError;
   }
 }
 
@@ -223,29 +234,27 @@ async function fetchWithTimeout(
   signal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
-
-  let combinedSignal = controller.signal;
+  const combinedSignal = controller.signal;
 
   if (signal) {
     const handleExternalAbort = () => controller.abort();
     signal.addEventListener("abort", handleExternalAbort);
 
-    // クリーンアップ用
-    const originalSignal = combinedSignal;
-    combinedSignal = new Proxy(originalSignal, {
-      get(target, prop) {
-        if (prop === "aborted") {
-          return target.aborted || signal.aborted;
-        }
-        return target[prop as keyof AbortSignal];
-      },
-    }) as AbortSignal;
+    if (signal.aborted) {
+      controller.abort();
+    }
   }
 
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, { signal: combinedSignal });
+    const response = await fetch(url, {
+      signal: combinedSignal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "kuhi-api-mcp-server/1.4.1",
+      },
+    });
     clearTimeout(timeoutId);
     return response;
   } catch (error) {
@@ -257,60 +266,32 @@ async function fetchWithTimeout(
   }
 }
 
-// リトライ機能付きのfetch
 async function fetchWithRetry(
   url: string,
   signal?: AbortSignal,
 ): Promise<Response> {
   let lastError: Error = new Error("No attempts made");
 
-  logger.debug(`Starting fetch with retry for: ${url}`);
-
   for (let attempt = 1; attempt <= CONFIG.RETRY_ATTEMPTS; attempt++) {
     try {
-      logger.debug(
-        `Fetch attempt ${attempt}/${CONFIG.RETRY_ATTEMPTS} for: ${url}`,
-      );
       const response = await fetchWithTimeout(
         url,
         CONFIG.REQUEST_TIMEOUT,
         signal,
       );
-
-      if (attempt > 1) {
-        logger.info(`Fetch succeeded on attempt ${attempt} for: ${url}`);
-      }
-
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (lastError.name === "AbortError" || signal?.aborted) {
-        logger.info(`Request aborted for: ${url}`);
         throw lastError;
       }
 
-      logger.warn(`Fetch attempt ${attempt} failed for ${url}:`, {
-        error: lastError.message,
-        attempt,
-        maxAttempts: CONFIG.RETRY_ATTEMPTS,
-      });
-
       if (attempt === CONFIG.RETRY_ATTEMPTS) {
-        logger.error(
-          `All ${CONFIG.RETRY_ATTEMPTS} fetch attempts failed for: ${url}`,
-          {
-            finalError: lastError.message,
-          },
-        );
         break;
       }
 
-      // 指数バックオフでリトライ間隔を設定
       const delay = Math.min(1000 * 2 ** (attempt - 1), 5000);
-      logger.debug(
-        `Waiting ${delay}ms before retry ${attempt + 1} for: ${url}`,
-      );
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -320,7 +301,6 @@ async function fetchWithRetry(
   );
 }
 
-// 配列の安全なアクセス
 function safeArrayAccess<T>(
   array: T[] | undefined,
   index: number,
@@ -328,7 +308,6 @@ function safeArrayAccess<T>(
   return array && array.length > index ? array[index] : undefined;
 }
 
-// URL構築のヘルパー関数
 function buildApiUrl(
   endpoint: string,
   id?: number | string,
@@ -356,21 +335,22 @@ function buildApiUrl(
   return url;
 }
 
-// API呼び出し関数（共通化）
+// API Functions
 async function fetchHaikuMonuments(): Promise<HaikuMonument[]> {
-  const data = await fetchResource<HaikuMonumentResponse>(
+  const data = await fetchResource(
     ENDPOINTS.HAIKU_MONUMENTS,
-    z.object({ haiku_monuments: z.array(HaikuMonumentSchema) }),
+    HaikuMonumentResponseSchema,
   );
-  return data.haiku_monuments;
+  return data.haiku_monuments.map(transformZodToHaikuMonument);
 }
 
 async function fetchHaikuMonumentById(id: number): Promise<HaikuMonument> {
-  return await fetchResource<HaikuMonument>(
+  const data = await fetchResource(
     ENDPOINTS.HAIKU_MONUMENTS,
     HaikuMonumentSchema,
     id,
   );
+  return transformZodToHaikuMonument(data);
 }
 
 async function searchHaikuMonuments(
@@ -382,16 +362,16 @@ async function searchHaikuMonuments(
       .map(([key, value]) => [key, String(value)]),
   );
 
-  const data = await fetchResource<HaikuMonumentResponse>(
+  const data = await fetchResource(
     ENDPOINTS.HAIKU_MONUMENTS,
     HaikuMonumentResponseSchema,
     undefined,
     params,
   );
-  return data.haiku_monuments;
+  return data.haiku_monuments.map(transformZodToHaikuMonument);
 }
 
-async function fetchPoets(options?: SearchOptions): Promise<Poet[]> {
+async function fetchPoets(options?: Partial<SearchOptions>): Promise<Poet[]> {
   const params = options
     ? Object.fromEntries(
         Object.entries(options)
@@ -402,26 +382,35 @@ async function fetchPoets(options?: SearchOptions): Promise<Poet[]> {
 
   return await fetchResource<Poet[]>(
     ENDPOINTS.POETS,
-    z.array(PoetSchema),
+    undefined,
     undefined,
     params,
   );
 }
 
 async function fetchPoetById(id: number): Promise<Poet> {
-  return await fetchResource<Poet>(ENDPOINTS.POETS, undefined, id);
+  const data = await fetchResource(ENDPOINTS.POETS, PoetSchema, id);
+  return {
+    ...data,
+    biography: data.biography ?? null,
+    link_url: data.link_url ?? null,
+    image_url: data.image_url ?? null,
+  } as Poet;
 }
 
 async function fetchHaikuMonumentsByPoet(
   poetId: number,
 ): Promise<HaikuMonument[]> {
-  return await fetchResource<HaikuMonument[]>(
+  const data = await fetchResource(
     `${ENDPOINTS.POETS}/${poetId}${ENDPOINTS.HAIKU_MONUMENTS}`,
     z.array(HaikuMonumentSchema),
   );
+  return data.map(transformZodToHaikuMonument);
 }
 
-async function fetchSources(options?: SearchOptions): Promise<Source[]> {
+async function fetchSources(
+  options?: Partial<SearchOptions>,
+): Promise<Source[]> {
   const params = options
     ? Object.fromEntries(
         Object.entries(options)
@@ -430,7 +419,7 @@ async function fetchSources(options?: SearchOptions): Promise<Source[]> {
       )
     : undefined;
 
-  return await fetchResource<Source[]>(
+  return await fetchResource(
     ENDPOINTS.SOURCES,
     z.array(SourceSchema),
     undefined,
@@ -439,10 +428,12 @@ async function fetchSources(options?: SearchOptions): Promise<Source[]> {
 }
 
 async function fetchSourceById(id: number): Promise<Source> {
-  return await fetchResource<Source>(ENDPOINTS.SOURCES, undefined, id);
+  return await fetchResource(ENDPOINTS.SOURCES, SourceSchema, id);
 }
 
-async function fetchLocations(options?: SearchOptions): Promise<Location[]> {
+async function fetchLocations(
+  options?: Partial<SearchOptions>,
+): Promise<Location[]> {
   const params = options
     ? Object.fromEntries(
         Object.entries(options)
@@ -451,34 +442,36 @@ async function fetchLocations(options?: SearchOptions): Promise<Location[]> {
       )
     : undefined;
 
-  return await fetchResource<Location[]>(
+  const data = await fetchResource(
     ENDPOINTS.LOCATIONS,
     z.array(LocationSchema),
     undefined,
     params,
   );
+  return data.map(transformZodToLocation);
 }
 
 async function fetchLocationById(id: number): Promise<Location> {
-  return await fetchResource<Location>(ENDPOINTS.LOCATIONS, undefined, id);
+  const data = await fetchResource(ENDPOINTS.LOCATIONS, LocationSchema, id);
+  return transformZodToLocation(data);
 }
 
 async function fetchHaikuMonumentsByRegion(
   region: string,
 ): Promise<HaikuMonument[]> {
-  const data = await fetchResource<HaikuMonumentResponse>(
+  const data = await fetchResource(
     ENDPOINTS.HAIKU_MONUMENTS,
     HaikuMonumentResponseSchema,
     undefined,
     { region },
   );
-  return data.haiku_monuments;
+  return data.haiku_monuments.map(transformZodToHaikuMonument);
 }
 
 async function countHaikuMonumentsByPrefecture(
   prefecture: string,
 ): Promise<number> {
-  const data = await fetchResource<HaikuMonumentResponse>(
+  const data = await fetchResource(
     ENDPOINTS.HAIKU_MONUMENTS,
     HaikuMonumentResponseSchema,
     undefined,
@@ -501,13 +494,13 @@ async function fetchHaikuMonumentsByCoordinates(
     throw new Error("Invalid radius: radius must be greater than 0");
   }
 
-  const data = await fetchResource<HaikuMonumentResponse>(
+  const data = await fetchResource(
     ENDPOINTS.HAIKU_MONUMENTS,
     HaikuMonumentResponseSchema,
     undefined,
     { lat: lat.toString(), lon: lon.toString(), radius: radius.toString() },
   );
-  return data.haiku_monuments;
+  return data.haiku_monuments.map(transformZodToHaikuMonument);
 }
 
 function convertToGeoJSON(
@@ -536,13 +529,13 @@ function convertToGeoJSON(
           id: monument.id,
           inscription: monument.inscription,
           established_date: monument.established_date,
-          commentary: monument.commentary,
-          photo_url: monument.photo_url,
-          poet_name: poet?.name || "不明",
+          commentary: monument.commentary ?? null,
+          photo_url: monument.photo_url ?? null,
+          poet_name: poet?.name ?? "不明",
           prefecture: location.prefecture,
           region: location.region,
           address: location.address,
-          place_name: location.place_name,
+          place_name: location.place_name ?? null,
         },
       };
     });
@@ -667,6 +660,42 @@ function validateNumberInput(
   return input;
 }
 
+// 監視・ヘルスチェック関数
+function getValidationMetrics(): ValidationMetrics & {
+  successRate: number;
+  isHealthy: boolean;
+} {
+  const successRate =
+    validationMetrics.totalRequests > 0
+      ? (validationMetrics.totalRequests -
+          validationMetrics.validationFailures) /
+        validationMetrics.totalRequests
+      : 1.0;
+
+  const isHealthy = successRate >= 0.95;
+
+  return {
+    ...validationMetrics,
+    successRate,
+    isHealthy,
+  };
+}
+
+function logValidationHealth(): void {
+  const metrics = getValidationMetrics();
+
+  if (!metrics.isHealthy) {
+    logger.error("Validation health check failed", metrics);
+  } else {
+    logger.info("Validation health check passed", {
+      totalRequests: metrics.totalRequests,
+      successRate: metrics.successRate,
+    });
+  }
+}
+
+setInterval(logValidationHealth, 5 * 60 * 1000);
+
 server.tool(
   "get_haiku_monuments",
   "句碑データベースに登録されているすべての句碑の情報を表示",
@@ -728,8 +757,22 @@ server.tool(
     offset: z.number().optional().describe("取得開始位置"),
   },
   async (options) => {
-    const data = await searchHaikuMonuments(options);
-    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+    const searchOptions: SearchOptions = Object.fromEntries(
+      Object.entries(options)
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => [key, value]),
+    ) as SearchOptions;
+
+    const data = await searchHaikuMonuments(searchOptions);
+    const formatted = data.map(formatHaikuMonumentForDisplay).join("\n\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text: `検索結果（${data.length}件）:\n\n${formatted}`,
+        },
+      ],
+    };
   },
 );
 
@@ -742,7 +785,10 @@ server.tool(
     limit: z.number().optional().describe("取得件数"),
   },
   async (options) => {
-    const data = await fetchPoets(options);
+    const filteredOptions = Object.fromEntries(
+      Object.entries(options).filter(([, value]) => value !== undefined),
+    );
+    const data = await fetchPoets(filteredOptions);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
   },
 );
@@ -775,7 +821,10 @@ server.tool(
     limit: z.number().optional().describe("取得件数"),
   },
   async (options) => {
-    const data = await fetchSources(options);
+    const filteredOptions = Object.fromEntries(
+      Object.entries(options).filter(([, value]) => value !== undefined),
+    );
+    const data = await fetchSources(filteredOptions);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
   },
 );
@@ -799,7 +848,10 @@ server.tool(
     limit: z.number().optional().describe("取得件数"),
   },
   async (options) => {
-    const data = await fetchLocations(options);
+    const filteredOptions = Object.fromEntries(
+      Object.entries(options).filter(([, value]) => value !== undefined),
+    );
+    const data = await fetchLocations(filteredOptions);
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
   },
 );
@@ -820,7 +872,15 @@ server.tool(
   { region: z.string().describe("地域名") },
   async ({ region }) => {
     const data = await fetchHaikuMonumentsByRegion(region);
-    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+    const formatted = data.map(formatHaikuMonumentForDisplay).join("\n\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${region}地域の句碑（${data.length}件）:\n\n${formatted}`,
+        },
+      ],
+    };
   },
 );
 
@@ -830,7 +890,14 @@ server.tool(
   { prefecture: z.string().describe("県名") },
   async ({ prefecture }) => {
     const count = await countHaikuMonumentsByPrefecture(prefecture);
-    return { content: [{ type: "text", text: count.toString() }] };
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${prefecture}の句碑数: ${count}基`,
+        },
+      ],
+    };
   },
 );
 
@@ -903,6 +970,54 @@ server.tool(
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
   },
 );
+
+// 型変換ヘルパー関数
+function transformZodToHaikuMonument(
+  zodData: z.infer<typeof HaikuMonumentSchema>,
+): HaikuMonument {
+  return {
+    ...zodData,
+    commentary: zodData.commentary ?? null,
+    kigo: zodData.kigo ?? null,
+    season: zodData.season ?? null,
+    is_reliable: zodData.is_reliable ?? null,
+    has_reverse_inscription: zodData.has_reverse_inscription ?? null,
+    material: zodData.material ?? null,
+    total_height: zodData.total_height ?? null,
+    width: zodData.width ?? null,
+    depth: zodData.depth ?? null,
+    established_year: zodData.established_year ?? null,
+    founder: zodData.founder ?? null,
+    monument_type: zodData.monument_type ?? null,
+    designation_status: zodData.designation_status ?? null,
+    photo_url: zodData.photo_url ?? null,
+    photo_date: zodData.photo_date ?? null,
+    photographer: zodData.photographer ?? null,
+    model_3d_url: zodData.model_3d_url ?? null,
+    remarks: zodData.remarks ?? null,
+    poets: zodData.poets.map((poet) => ({
+      ...poet,
+      biography: poet.biography ?? null,
+      link_url: poet.link_url ?? null,
+      image_url: poet.image_url ?? null,
+    })),
+    locations: zodData.locations.map((location) => ({
+      ...location,
+      municipality: location.municipality ?? null,
+      place_name: location.place_name ?? null,
+    })),
+  } as HaikuMonument;
+}
+
+function transformZodToLocation(
+  zodData: z.infer<typeof LocationSchema>,
+): Location {
+  return {
+    ...zodData,
+    municipality: zodData.municipality ?? null,
+    place_name: zodData.place_name ?? null,
+  } as Location;
+}
 
 async function main() {
   const transport = new StdioServerTransport();

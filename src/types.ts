@@ -1,115 +1,127 @@
-export interface HaikuMonument {
-  id: number;
-  inscription: string;
-  commentary: string;
-  kigo?: string;
-  season?: string;
-  is_reliable?: boolean;
-  has_reverse_inscription?: boolean;
-  material?: string | null;
-  total_height?: number | null;
-  width?: number | null;
-  depth?: number | null;
-  established_date: string;
-  established_year?: string;
-  founder?: string;
-  monument_type?: string;
-  designation_status?: string | null;
-  photo_url?: string | null;
-  photo_date?: string | null;
-  photographer?: string | null;
-  model_3d_url?: string | null;
-  remarks?: string | null;
-  created_at: string;
-  updated_at: string;
-  poet_id: number;
-  source_id: number;
-  location_id: number;
-  poets: Poet[];
-  sources: Source[];
-  locations: Location[];
+interface BaseEntity {
+  readonly id: number;
+  readonly created_at: string;
+  readonly updated_at: string;
 }
 
-export interface Poet {
-  id: number;
-  name: string;
-  biography: string;
-  link_url: string;
-  image_url: string;
-  created_at: string;
-  updated_at: string;
+export interface Poet extends BaseEntity {
+  readonly name: string;
+  readonly biography: string | null;
+  readonly link_url: string | null;
+  readonly image_url: string | null;
 }
 
-export interface Source {
-  id: number;
-  title: string;
-  author: string;
-  publisher: string;
-  source_year: number;
-  url: string;
-  created_at: string;
-  updated_at: string;
+export interface Source extends BaseEntity {
+  readonly title: string;
+  readonly author: string;
+  readonly publisher: string;
+  readonly source_year: number;
+  readonly url: string;
 }
 
 export interface Location {
-  id: number;
-  region: string;
-  prefecture: string;
-  municipality?: string;
-  address: string;
-  place_name?: string;
-  latitude: number;
-  longitude: number;
+  readonly id: number;
+  readonly region: string;
+  readonly prefecture: string;
+  readonly municipality?: string | null;
+  readonly address: string;
+  readonly place_name?: string | null;
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+export interface HaikuMonument extends BaseEntity {
+  readonly inscription: string;
+  readonly commentary?: string | null;
+  readonly kigo?: string;
+  readonly season?: string;
+  readonly is_reliable?: boolean;
+  readonly has_reverse_inscription?: boolean | null;
+  readonly material?: string | null;
+  readonly total_height?: number | null;
+  readonly width?: number | null;
+  readonly depth?: number | null;
+  readonly established_date: string;
+  readonly established_year?: string | null;
+  readonly founder?: string | null;
+  readonly monument_type?: string | null;
+  readonly designation_status?: string | null;
+  readonly photo_url?: string | null;
+  readonly photo_date?: string | null;
+  readonly photographer?: string | null;
+  readonly model_3d_url?: string | null;
+  readonly remarks?: string | null;
+  readonly poet_id: number;
+  readonly source_id: number;
+  readonly location_id: number;
+  readonly poets: Poet[];
+  readonly sources: Source[];
+  readonly locations: Location[];
 }
 
 export interface HaikuMonumentResponse {
-  haiku_monuments: HaikuMonument[];
+  readonly haiku_monuments: HaikuMonument[];
 }
 
 export interface GeoJSONFeature {
-  type: "Feature";
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
+  readonly type: "Feature";
+  readonly geometry: {
+    readonly type: "Point";
+    readonly coordinates: readonly [number, number];
   };
-  properties: {
-    id: number;
-    inscription: string;
-    established_date: string;
-    commentary: string;
-    photo_url?: string | null;
-    poet_name: string;
-    prefecture: string;
-    region: string;
-    address: string;
-    place_name?: string;
+  readonly properties: {
+    readonly id: number;
+    readonly inscription: string;
+    readonly established_date: string;
+    readonly commentary?: string | null;
+    readonly photo_url?: string | null;
+    readonly poet_name: string;
+    readonly prefecture: string;
+    readonly region: string;
+    readonly address: string;
+    readonly place_name?: string | null;
   };
 }
 
 export interface GeoJSONFeatureCollection {
-  type: "FeatureCollection";
-  features: GeoJSONFeature[];
+  readonly type: "FeatureCollection";
+  readonly features: readonly GeoJSONFeature[];
 }
 
 export interface SearchOptions {
-  limit?: number;
-  offset?: number;
-  ordering?: string[];
-  search?: string;
-  title_contains?: string;
-  description_contains?: string;
-  name_contains?: string;
-  biography_contains?: string;
-  prefecture?: string;
-  region?: string;
-  created_at_gt?: string;
-  created_at_lt?: string;
-  updated_at_gt?: string;
-  updated_at_lt?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+  readonly ordering?: readonly string[];
+  readonly search?: string;
+  readonly title_contains?: string;
+  readonly description_contains?: string;
+  readonly name_contains?: string;
+  readonly biography_contains?: string;
+  readonly prefecture?: string;
+  readonly region?: string;
+  readonly created_at_gt?: string;
+  readonly created_at_lt?: string;
+  readonly updated_at_gt?: string;
+  readonly updated_at_lt?: string;
 }
 
 export interface ApiResponse<T> {
-  data: T;
-  status: number;
-  message?: string;
+  readonly data: T;
+  readonly status: number;
+  readonly message?: string;
+}
+
+export interface Coordinates {
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+export interface CoordinateSearchCriteria extends Coordinates {
+  readonly radius: number;
+}
+
+export interface ApiError {
+  readonly code: string;
+  readonly message: string;
+  readonly details?: Record<string, unknown>;
 }
