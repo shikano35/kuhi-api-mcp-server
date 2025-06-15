@@ -154,7 +154,7 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
 
 ### 前提条件
 
-- Node.js 18 以降
+- Node.js 20 以降
 - pnpm (推奨) または npm
 
 ### セットアップ
