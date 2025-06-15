@@ -1,69 +1,83 @@
 import { z } from "zod";
 
-const MAX_LIMIT = 1000;
+const VALIDATION_LIMITS = {
+  MAX_LIMIT: 1000,
+  MIN_LIMIT: 1,
+  MIN_OFFSET: 0,
+  LAT_MIN: -90,
+  LAT_MAX: 90,
+  LON_MIN: -180,
+  LON_MAX: 180,
+  MIN_RADIUS: 0,
+} as const;
+
+const IdSchema = z.number().int().positive();
+const TimestampSchema = z.string().datetime();
+const OptionalStringSchema = z.string().nullable().optional();
+const OptionalNumberSchema = z.number().nullable().optional();
+
+const PoetEmbeddedSchema = z.object({
+  id: IdSchema,
+  name: z.string(),
+  biography: z.string().nullable(),
+  link_url: z.string().nullable(),
+  image_url: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+
+const SourceEmbeddedSchema = z.object({
+  id: IdSchema,
+  title: z.string(),
+  author: z.string(),
+  publisher: z.string(),
+  source_year: z.number().int(),
+  url: z.string().url(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+
+const LocationEmbeddedSchema = z.object({
+  id: IdSchema,
+  region: z.string(),
+  prefecture: z.string(),
+  municipality: z.string().nullable().optional(),
+  address: z.string(),
+  place_name: z.string().nullable().optional(),
+  latitude: z.number().min(VALIDATION_LIMITS.LAT_MIN).max(VALIDATION_LIMITS.LAT_MAX),
+  longitude: z.number().min(VALIDATION_LIMITS.LON_MIN).max(VALIDATION_LIMITS.LON_MAX),
+});
 
 export const HaikuMonumentSchema = z.object({
-  id: z.number(),
+  id: IdSchema,
   inscription: z.string(),
-  commentary: z.string(),
+  commentary: OptionalStringSchema,
   kigo: z.string().optional(),
   season: z.string().optional(),
   is_reliable: z.boolean().optional(),
-  has_reverse_inscription: z.boolean().optional(),
-  material: z.string().nullable().optional(),
-  total_height: z.number().nullable().optional(),
-  width: z.number().nullable().optional(),
-  depth: z.number().nullable().optional(),
+  has_reverse_inscription: z.boolean().nullable().optional(),
+  material: OptionalStringSchema,
+  total_height: OptionalNumberSchema,
+  width: OptionalNumberSchema,
+  depth: OptionalNumberSchema,
   established_date: z.string(),
-  established_year: z.string().optional(),
-  founder: z.string().optional(),
-  monument_type: z.string().optional(),
-  designation_status: z.string().nullable().optional(),
-  photo_url: z.string().nullable().optional(),
-  photo_date: z.string().nullable().optional(),
-  photographer: z.string().nullable().optional(),
-  model_3d_url: z.string().nullable().optional(),
-  remarks: z.string().nullable().optional(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  poet_id: z.number(),
-  source_id: z.number(),
-  location_id: z.number(),
-  poets: z.array(
-    z.object({
-      id: z.number(),
-      name: z.string(),
-      biography: z.string(),
-      link_url: z.string(),
-      image_url: z.string(),
-      created_at: z.string(),
-      updated_at: z.string(),
-    }),
-  ),
-  sources: z.array(
-    z.object({
-      id: z.number(),
-      title: z.string(),
-      author: z.string(),
-      publisher: z.string(),
-      source_year: z.number(),
-      url: z.string(),
-      created_at: z.string(),
-      updated_at: z.string(),
-    }),
-  ),
-  locations: z.array(
-    z.object({
-      id: z.number(),
-      region: z.string(),
-      prefecture: z.string(),
-      municipality: z.string().optional(),
-      address: z.string(),
-      place_name: z.string().optional(),
-      latitude: z.number(),
-      longitude: z.number(),
-    }),
-  ),
+  established_year: OptionalStringSchema,
+  founder: OptionalStringSchema,
+  monument_type: OptionalStringSchema,
+  designation_status: OptionalStringSchema,
+  photo_url: OptionalStringSchema,
+  photo_date: OptionalStringSchema,
+  photographer: OptionalStringSchema,
+  model_3d_url: OptionalStringSchema,
+  remarks: OptionalStringSchema,
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+  poet_id: IdSchema,
+  source_id: IdSchema,
+  location_id: IdSchema,
+  poets: z.array(PoetEmbeddedSchema),
+  sources: z.array(SourceEmbeddedSchema),
+  locations: z.array(LocationEmbeddedSchema),
 });
 
 export const SearchOptionsSchema = z.object({
@@ -74,11 +88,21 @@ export const SearchOptionsSchema = z.object({
   description_contains: z.string().optional(),
   name_contains: z.string().optional(),
   biography_contains: z.string().optional(),
-  limit: z.number().min(1).max(MAX_LIMIT).optional(),
-  offset: z.number().min(0).optional(),
-  lat: z.number().min(-90).max(90).optional(),
-  lon: z.number().min(-180).max(180).optional(),
-  radius: z.number().min(0).optional(),
+  limit: z.number()
+    .int()
+    .min(VALIDATION_LIMITS.MIN_LIMIT)
+    .max(VALIDATION_LIMITS.MAX_LIMIT)
+    .optional(),
+  offset: z.number().int().min(VALIDATION_LIMITS.MIN_OFFSET).optional(),
+  lat: z.number()
+    .min(VALIDATION_LIMITS.LAT_MIN)
+    .max(VALIDATION_LIMITS.LAT_MAX)
+    .optional(),
+  lon: z.number()
+    .min(VALIDATION_LIMITS.LON_MIN)
+    .max(VALIDATION_LIMITS.LON_MAX)
+    .optional(),
+  radius: z.number().min(VALIDATION_LIMITS.MIN_RADIUS).optional(),
 });
 
 export const SeasonEnum = z.enum(["春", "夏", "秋", "冬"]);
@@ -95,38 +119,17 @@ export const RegionEnum = z.enum([
   "沖縄",
 ]);
 
-export const PoetSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  biography: z.string(),
-  link_url: z.string(),
-  image_url: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
-});
 
-export const SourceSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  author: z.string(),
-  publisher: z.string(),
-  source_year: z.number(),
-  url: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
-});
+export const PoetSchema = PoetEmbeddedSchema;
 
-export const LocationSchema = z.object({
-  id: z.number(),
-  region: z.string(),
-  prefecture: z.string(),
-  municipality: z.string().optional(),
-  address: z.string(),
-  place_name: z.string().optional(),
-  latitude: z.number(),
-  longitude: z.number(),
-});
+export const SourceSchema = SourceEmbeddedSchema;
+
+export const LocationSchema = LocationEmbeddedSchema;
 
 export const HaikuMonumentResponseSchema = z.object({
   haiku_monuments: z.array(HaikuMonumentSchema),
 });
+
+export type SearchOptions = z.infer<typeof SearchOptionsSchema>;
+export type Season = z.infer<typeof SeasonEnum>;
+export type Region = z.infer<typeof RegionEnum>;
