@@ -5,11 +5,11 @@ export const CONFIG = {
   REQUEST_TIMEOUT: 30000,
   RETRY_ATTEMPTS: 3,
   CACHE_DURATION: 300000,
-} as const;
+};
 
 export const ENDPOINTS = {
   HAIKU_MONUMENTS: "/haiku-monuments",
   POETS: "/poets",
   SOURCES: "/sources",
   LOCATIONS: "/locations",
-} as const;
+};

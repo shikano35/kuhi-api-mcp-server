@@ -65,18 +65,10 @@ const cacheMetrics = {
  */
 function getCacheKey(url: string, params?: Record<string, unknown>): string {
   if (!params) return url;
-
-  // パラメータのキーをソートして安定したキーを生成
-  const sortedParams = Object.keys(params)
-    .sort()
-    .reduce(
-      (result, key) => {
-        result[key] = params[key];
-        return result;
-      },
-      {} as Record<string, unknown>,
-    );
-
+  const sortedParams: Record<string, unknown> = {};
+  for (const key of Object.keys(params).sort()) {
+    sortedParams[key] = params[key];
+  }
   return `${url}:${JSON.stringify(sortedParams)}`;
 }
 
@@ -232,13 +224,10 @@ async function fetchWithTimeout(
   const controller = new AbortController();
 
   let combinedSignal = controller.signal;
-  let cleanup: (() => void) | null = null;
 
   if (signal) {
     const handleExternalAbort = () => controller.abort();
     signal.addEventListener("abort", handleExternalAbort);
-
-    cleanup = () => signal.removeEventListener("abort", handleExternalAbort);
 
     // クリーンアップ用
     const originalSignal = combinedSignal;
@@ -257,11 +246,9 @@ async function fetchWithTimeout(
   try {
     const response = await fetch(url, { signal: combinedSignal });
     clearTimeout(timeoutId);
-    cleanup?.();
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
-    cleanup?.();
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request timeout after ${timeoutMs}ms`);
     }
