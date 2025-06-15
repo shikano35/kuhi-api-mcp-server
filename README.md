@@ -181,7 +181,7 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
    **Cursor の場合:**
    `.cursor/mcp.json` に以下を追加:
 
-   **方法 1: npx を使用（推奨）**
+   **方法 1: npx を使用**
 
    ```json
    {
