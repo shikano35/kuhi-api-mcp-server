@@ -5,16 +5,13 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "start": "node ./dist/index.js",
-    "dev": "tsx watch src/index.ts",
     "build": "tsc && chmod +x dist/index.js",
     "clean": "rm -rf dist/*",
     "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome check --write .",
-    "check": "biome check",
-    "prepublishOnly": "npm run build"
+    "check": "biome check"
   },
   "bin": {
     "kuhi-api-mcp-server": "./dist/index.js"
@@ -34,9 +31,7 @@
     "kuhi"
   ],
   "module": "./dist/index.js",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "license": "MIT",
   "packageManager": "pnpm@10.7.1",
   "dependencies": {
