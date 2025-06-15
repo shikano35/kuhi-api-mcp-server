@@ -1,78 +1,101 @@
 import type { HaikuMonument } from "./types.js";
 
+export interface MonumentStatistics {
+  readonly total: number;
+  readonly byPrefecture: Record<string, number>;
+  readonly byRegion: Record<string, number>;
+  readonly byPoet: Record<string, number>;
+  readonly bySeason: Record<string, number>;
+}
+
+const COORDINATE_BOUNDS = {
+  LAT_MIN: -90,
+  LAT_MAX: 90,
+  LON_MIN: -180,
+  LON_MAX: 180,
+} as const;
+
+const SEASON_MAP: Readonly<Record<string, string>> = {
+  春: "春",
+  spring: "春",
+  はる: "春",
+  夏: "夏",
+  summer: "夏",
+  なつ: "夏",
+  秋: "秋",
+  autumn: "秋",
+  fall: "秋",
+  あき: "秋",
+  冬: "冬",
+  winter: "冬",
+  ふゆ: "冬",
+} as const;
+
 export function formatHaikuMonumentForDisplay(monument: HaikuMonument): string {
   const poet = monument.poets[0];
   const location = monument.locations[0];
   return `【句碑ID: ${monument.id}】
 句: ${monument.inscription}
-俳人: ${poet?.name || "不明"}
-設置場所: ${location?.prefecture || ""} ${location?.region || ""} ${location?.address || ""}
+俳人: ${poet?.name ?? "不明"}
+設置場所: ${location?.prefecture ?? ""} ${location?.region ?? ""} ${location?.address ?? ""}
 建立日: ${monument.established_date}
-解説: ${monument.commentary || "なし"}
-季語: ${monument.kigo || "なし"}
-季節: ${monument.season || "不明"}`;
+解説: ${monument.commentary ?? "なし"}
+季語: ${monument.kigo ?? "なし"}
+季節: ${monument.season ?? "不明"}`;
 }
 
-export function formatStatisticsForDisplay(statistics: {
-  total: number;
-  byPrefecture: Record<string, number>;
-  byRegion: Record<string, number>;
-  byPoet: Record<string, number>;
-  bySeason: Record<string, number>;
-}): string {
+export function formatStatisticsForDisplay(statistics: MonumentStatistics): string {
+  const formatTopEntries = (entries: readonly [string, number][]): string => {
+    return entries
+      .map(([name, count]) => `  ${name}: ${count}基`)
+      .join("\n");
+  };
+
   const topPrefectures = Object.entries(statistics.byPrefecture)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
+    
   const topPoets = Object.entries(statistics.byPoet)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
+
+  const seasonEntries = Object.entries(statistics.bySeason);
+  const regionEntries = Object.entries(statistics.byRegion);
 
   return `【句碑データベース統計情報】
 総句碑数: ${statistics.total}
 
 ■都道府県別トップ5:
-${topPrefectures.map(([name, count]) => `  ${name}: ${count}基`).join("\n")}
+${formatTopEntries(topPrefectures)}
 
 ■俳人別トップ5:
-${topPoets.map(([name, count]) => `  ${name}: ${count}基`).join("\n")}
+${formatTopEntries(topPoets)}
 
 ■季節別分布:
-${Object.entries(statistics.bySeason)
-  .map(([season, count]) => `  ${season}: ${count}基`)
-  .join("\n")}
+${formatTopEntries(seasonEntries)}
 
 ■地域別分布:
-${Object.entries(statistics.byRegion)
-  .map(([region, count]) => `  ${region}: ${count}基`)
-  .join("\n")}`;
+${formatTopEntries(regionEntries)}`;
 }
 
 export function validateCoordinates(lat: number, lon: number): boolean {
-  return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+  return lat >= COORDINATE_BOUNDS.LAT_MIN && 
+         lat <= COORDINATE_BOUNDS.LAT_MAX && 
+         lon >= COORDINATE_BOUNDS.LON_MIN && 
+         lon <= COORDINATE_BOUNDS.LON_MAX;
 }
 
 export function formatDistance(meters: number): string {
-  if (meters < 1000) {
+  const METERS_PER_KM = 1000;
+  
+  if (meters < METERS_PER_KM) {
     return `${Math.round(meters)}m`;
   }
-  return `${(meters / 1000).toFixed(1)}km`;
+  
+  return `${(meters / METERS_PER_KM).toFixed(1)}km`;
 }
 
 export function parseSeasonQuery(query: string): string | null {
-  const seasonMap: Record<string, string> = {
-    春: "春",
-    spring: "春",
-    はる: "春",
-    夏: "夏",
-    summer: "夏",
-    なつ: "夏",
-    秋: "秋",
-    autumn: "秋",
-    fall: "秋",
-    あき: "秋",
-    冬: "冬",
-    winter: "冬",
-    ふゆ: "冬",
-  };
-  return seasonMap[query.toLowerCase()] || null;
+  const normalizedQuery = query.toLowerCase();
+  return SEASON_MAP[normalizedQuery] ?? null;
 }
