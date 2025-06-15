@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const MAX_LIMIT = 1000;
+
 export const HaikuMonumentSchema = z.object({
   id: z.number(),
   inscription: z.string(),
@@ -65,8 +67,8 @@ export const HaikuMonumentSchema = z.object({
 });
 
 export const SearchOptionsSchema = z.object({
-  limit: z.number().optional(),
-  offset: z.number().optional(),
+  limit: z.number().min(1).max(MAX_LIMIT).optional(),
+  offset: z.number().min(0).optional(),
   ordering: z.array(z.string()).optional(),
   search: z.string().optional(),
   title_contains: z.string().optional(),
@@ -94,3 +96,39 @@ export const RegionEnum = z.enum([
   "九州",
   "沖縄",
 ]);
+
+export const PoetSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  biography: z.string(),
+  link_url: z.string(),
+  image_url: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const SourceSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  author: z.string(),
+  publisher: z.string(),
+  source_year: z.number(),
+  url: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const LocationSchema = z.object({
+  id: z.number(),
+  region: z.string(),
+  prefecture: z.string(),
+  municipality: z.string().optional(),
+  address: z.string(),
+  place_name: z.string().optional(),
+  latitude: z.number(),
+  longitude: z.number(),
+});
+
+export const HaikuMonumentResponseSchema = z.object({
+  haiku_monuments: z.array(HaikuMonumentSchema),
+});
