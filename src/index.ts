@@ -5,7 +5,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { CONFIG, ENDPOINTS } from "./config.js";
 import { logger } from "./logger.js";
-import { HaikuMonumentSchema, SearchOptionsSchema } from "./schemas.js";
+import {
+  HaikuMonumentResponseSchema,
+  HaikuMonumentSchema,
+  LocationSchema,
+  PoetSchema,
+  SourceSchema,
+} from "./schemas.js";
 import type {
   GeoJSONFeature,
   GeoJSONFeatureCollection,
@@ -24,18 +30,35 @@ import {
 
 const server = new McpServer({
   name: "kuhi-api-mcp-server",
-  version: "1.1.0",
+  version: "1.4.1",
 });
 
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
   size: number;
+  lastAccessed: number;
 }
 
 const cache = new Map<string, CacheEntry<unknown>>();
 const CACHE_SIZE_LIMIT = 50 * 1024 * 1024;
 let currentCacheSize = 0;
+
+const cacheMetrics = {
+  hits: 0,
+  misses: 0,
+  evictions: 0,
+  totalRequests: 0,
+  get hitRate() {
+    return this.totalRequests > 0 ? this.hits / this.totalRequests : 0;
+  },
+  reset() {
+    this.hits = 0;
+    this.misses = 0;
+    this.evictions = 0;
+    this.totalRequests = 0;
+  },
+};
 
 /**
  * 安定したキャッシュキーを生成（オブジェクトキーをソートして文字列化）
@@ -61,22 +84,30 @@ function getCacheKey(url: string, params?: Record<string, unknown>): string {
  * キャッシュからデータを取得
  */
 function getFromCache<T>(key: string): T | null {
+  cacheMetrics.totalRequests++;
+
   const entry = cache.get(key) as CacheEntry<T> | undefined;
-  if (!entry) return null;
+  if (!entry) {
+    cacheMetrics.misses++;
+    return null;
+  }
 
   if (Date.now() - entry.timestamp > CONFIG.CACHE_DURATION) {
     cache.delete(key);
     currentCacheSize -= entry.size;
+    cacheMetrics.misses++;
     logger.debug(`Cache expired for key: ${key}`);
     return null;
   }
 
+  entry.lastAccessed = Date.now();
+  cacheMetrics.hits++;
   logger.debug(`Cache hit for key: ${key}`);
   return entry.data;
 }
 
 /**
- * データをキャッシュに保存（サイズ制限付き）
+ * データをキャッシュに保存
  */
 function setCache<T>(key: string, data: T): void {
   const dataStr = JSON.stringify(data);
@@ -88,29 +119,35 @@ function setCache<T>(key: string, data: T): void {
     return;
   }
 
-  // キャッシュサイズが制限を超える場合、古いエントリを削除
   while (currentCacheSize + size > CACHE_SIZE_LIMIT && cache.size > 0) {
-    const oldestKey = cache.keys().next().value;
-    if (!oldestKey) break; // 安全性チェック
+    let oldestKey: string | undefined;
+    let oldestTime = Date.now();
+
+    for (const [entryKey, entry] of cache) {
+      if (entry.lastAccessed < oldestTime) {
+        oldestTime = entry.lastAccessed;
+        oldestKey = entryKey;
+      }
+    }
+
+    if (!oldestKey) break;
 
     const oldEntry = cache.get(oldestKey) as CacheEntry<unknown>;
     cache.delete(oldestKey);
     currentCacheSize -= oldEntry.size;
+    cacheMetrics.evictions++;
     logger.debug(`Evicted cache entry: ${oldestKey}`);
   }
 
-  cache.set(key, { data, timestamp: Date.now(), size });
+  const now = Date.now();
+  cache.set(key, {
+    data,
+    timestamp: now,
+    size,
+    lastAccessed: now,
+  });
   currentCacheSize += size;
   logger.debug(`Cached data (${size} bytes): ${key}`);
-}
-
-/**
- * キャッシュをクリア
- */
-function clearCache(): void {
-  cache.clear();
-  currentCacheSize = 0;
-  logger.info("Cache cleared");
 }
 
 /**
@@ -144,7 +181,14 @@ async function fetchResource<T>(
       logger.debug(`Schema validation passed for: ${url}`);
       return validatedData;
     } catch (error) {
-      logger.warn(`Schema validation failed for ${url}:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      logger.warn(`Schema validation failed for ${url}:`, {
+        error: errorMessage,
+        endpoint,
+      });
+
       setCache(cacheKey, data);
       return data;
     }
@@ -179,31 +223,57 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
   }
 }
 
-// タイムアウト付きfetch（Node.js 18+のグローバルfetchを使用）
-async function fetchWithTimeout(url: string): Promise<Response> {
+// タイムアウト付きfetch
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs = CONFIG.REQUEST_TIMEOUT,
+  signal?: AbortSignal,
+): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    CONFIG.REQUEST_TIMEOUT,
-  );
+
+  let combinedSignal = controller.signal;
+  let cleanup: (() => void) | null = null;
+
+  if (signal) {
+    const handleExternalAbort = () => controller.abort();
+    signal.addEventListener("abort", handleExternalAbort);
+
+    cleanup = () => signal.removeEventListener("abort", handleExternalAbort);
+
+    // クリーンアップ用
+    const originalSignal = combinedSignal;
+    combinedSignal = new Proxy(originalSignal, {
+      get(target, prop) {
+        if (prop === "aborted") {
+          return target.aborted || signal.aborted;
+        }
+        return target[prop as keyof AbortSignal];
+      },
+    }) as AbortSignal;
+  }
+
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-    });
+    const response = await fetch(url, { signal: combinedSignal });
     clearTimeout(timeoutId);
+    cleanup?.();
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
+    cleanup?.();
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout after ${CONFIG.REQUEST_TIMEOUT}ms`);
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
     }
     throw error;
   }
 }
 
 // リトライ機能付きのfetch
-async function fetchWithRetry(url: string): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  signal?: AbortSignal,
+): Promise<Response> {
   let lastError: Error = new Error("No attempts made");
 
   logger.debug(`Starting fetch with retry for: ${url}`);
@@ -213,7 +283,11 @@ async function fetchWithRetry(url: string): Promise<Response> {
       logger.debug(
         `Fetch attempt ${attempt}/${CONFIG.RETRY_ATTEMPTS} for: ${url}`,
       );
-      const response = await fetchWithTimeout(url);
+      const response = await fetchWithTimeout(
+        url,
+        CONFIG.REQUEST_TIMEOUT,
+        signal,
+      );
 
       if (attempt > 1) {
         logger.info(`Fetch succeeded on attempt ${attempt} for: ${url}`);
@@ -222,6 +296,11 @@ async function fetchWithRetry(url: string): Promise<Response> {
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (lastError.name === "AbortError" || signal?.aborted) {
+        logger.info(`Request aborted for: ${url}`);
+        throw lastError;
+      }
 
       logger.warn(`Fetch attempt ${attempt} failed for ${url}:`, {
         error: lastError.message,
@@ -289,32 +368,6 @@ function buildApiUrl(
   return url;
 }
 
-/**
- * 検索オプションからURLSearchParamsを構築
- */
-function buildSearchQuery(options: SearchOptions): string {
-  // スキーマ検証
-  const validatedOptions = SearchOptionsSchema.parse(options);
-
-  const params = new URLSearchParams();
-
-  // すべてのフィールドを処理
-  for (const [key, value] of Object.entries(validatedOptions)) {
-    if (value === undefined || value === null) continue;
-
-    if (Array.isArray(value)) {
-      // 配列の場合（orderingなど）
-      for (const item of value) {
-        params.append(key, String(item));
-      }
-    } else {
-      params.append(key, String(value));
-    }
-  }
-
-  return params.toString();
-}
-
 // API呼び出し関数（共通化）
 async function fetchHaikuMonuments(): Promise<HaikuMonument[]> {
   const data = await fetchResource<HaikuMonumentResponse>(
@@ -335,58 +388,36 @@ async function fetchHaikuMonumentById(id: number): Promise<HaikuMonument> {
 async function searchHaikuMonuments(
   options: SearchOptions,
 ): Promise<HaikuMonument[]> {
-  const queryString = buildSearchQuery(options);
-  const url = `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}?${queryString}`;
-  const cacheKey = getCacheKey(url);
+  const params = Object.fromEntries(
+    Object.entries(options)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => [key, String(value)]),
+  );
 
-  const cachedData = getFromCache<HaikuMonumentResponse>(cacheKey);
-  if (cachedData) {
-    logger.debug(`Using cached search results for: ${url}`);
-    return cachedData.haiku_monuments;
-  }
-
-  logger.debug(`Searching haiku monuments: ${url}`);
-  const response = await fetchWithRetry(url);
-  const data = await handleApiResponse<HaikuMonumentResponse>(response);
-
-  // スキーマ検証
-  try {
-    const responseSchema = z.object({
-      haiku_monuments: z.array(HaikuMonumentSchema),
-    });
-    const validatedData = responseSchema.parse(data);
-    setCache(cacheKey, validatedData);
-    return validatedData.haiku_monuments;
-  } catch (error) {
-    logger.warn("Schema validation failed for search results:", error);
-    if (process.env.NODE_ENV === "development") {
-      throw new Error(
-        `Schema validation failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    setCache(cacheKey, data);
-    return data.haiku_monuments;
-  }
+  const data = await fetchResource<HaikuMonumentResponse>(
+    ENDPOINTS.HAIKU_MONUMENTS,
+    HaikuMonumentResponseSchema,
+    undefined,
+    params,
+  );
+  return data.haiku_monuments;
 }
 
 async function fetchPoets(options?: SearchOptions): Promise<Poet[]> {
-  // buildSearchQueryを使って複数条件に対応
-  const queryString = options ? buildSearchQuery(options) : "";
-  const url = queryString
-    ? `${CONFIG.API_BASE_URL}${ENDPOINTS.POETS}?${queryString}`
-    : `${CONFIG.API_BASE_URL}${ENDPOINTS.POETS}`;
+  const params = options
+    ? Object.fromEntries(
+        Object.entries(options)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([key, value]) => [key, String(value)]),
+      )
+    : undefined;
 
-  const cacheKey = getCacheKey(url);
-  const cachedData = getFromCache<Poet[]>(cacheKey);
-  if (cachedData) {
-    return cachedData;
-  }
-
-  const response = await fetchWithRetry(url);
-  const data = await handleApiResponse<Poet[]>(response);
-  setCache(cacheKey, data);
-
-  return data;
+  return await fetchResource<Poet[]>(
+    ENDPOINTS.POETS,
+    z.array(PoetSchema),
+    undefined,
+    params,
+  );
 }
 
 async function fetchPoetById(id: number): Promise<Poet> {
@@ -403,23 +434,20 @@ async function fetchHaikuMonumentsByPoet(
 }
 
 async function fetchSources(options?: SearchOptions): Promise<Source[]> {
-  // buildSearchQueryを使って複数条件に対応
-  const queryString = options ? buildSearchQuery(options) : "";
-  const url = queryString
-    ? `${CONFIG.API_BASE_URL}${ENDPOINTS.SOURCES}?${queryString}`
-    : `${CONFIG.API_BASE_URL}${ENDPOINTS.SOURCES}`;
+  const params = options
+    ? Object.fromEntries(
+        Object.entries(options)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([key, value]) => [key, String(value)]),
+      )
+    : undefined;
 
-  const cacheKey = getCacheKey(url);
-  const cachedData = getFromCache<Source[]>(cacheKey);
-  if (cachedData) {
-    return cachedData;
-  }
-
-  const response = await fetchWithRetry(url);
-  const data = await handleApiResponse<Source[]>(response);
-  setCache(cacheKey, data);
-
-  return data;
+  return await fetchResource<Source[]>(
+    ENDPOINTS.SOURCES,
+    z.array(SourceSchema),
+    undefined,
+    params,
+  );
 }
 
 async function fetchSourceById(id: number): Promise<Source> {
@@ -427,23 +455,20 @@ async function fetchSourceById(id: number): Promise<Source> {
 }
 
 async function fetchLocations(options?: SearchOptions): Promise<Location[]> {
-  // buildSearchQueryを使って複数条件に対応
-  const queryString = options ? buildSearchQuery(options) : "";
-  const url = queryString
-    ? `${CONFIG.API_BASE_URL}${ENDPOINTS.LOCATIONS}?${queryString}`
-    : `${CONFIG.API_BASE_URL}${ENDPOINTS.LOCATIONS}`;
+  const params = options
+    ? Object.fromEntries(
+        Object.entries(options)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([key, value]) => [key, String(value)]),
+      )
+    : undefined;
 
-  const cacheKey = getCacheKey(url);
-  const cachedData = getFromCache<Location[]>(cacheKey);
-  if (cachedData) {
-    return cachedData;
-  }
-
-  const response = await fetchWithRetry(url);
-  const data = await handleApiResponse<Location[]>(response);
-  setCache(cacheKey, data);
-
-  return data;
+  return await fetchResource<Location[]>(
+    ENDPOINTS.LOCATIONS,
+    z.array(LocationSchema),
+    undefined,
+    params,
+  );
 }
 
 async function fetchLocationById(id: number): Promise<Location> {
@@ -453,12 +478,13 @@ async function fetchLocationById(id: number): Promise<Location> {
 async function fetchHaikuMonumentsByRegion(
   region: string,
 ): Promise<HaikuMonument[]> {
-  return await fetchResource<HaikuMonumentResponse>(
+  const data = await fetchResource<HaikuMonumentResponse>(
     ENDPOINTS.HAIKU_MONUMENTS,
-    z.object({ haiku_monuments: z.array(HaikuMonumentSchema) }),
+    HaikuMonumentResponseSchema,
     undefined,
     { region },
-  ).then((data) => data.haiku_monuments);
+  );
+  return data.haiku_monuments;
 }
 
 async function countHaikuMonumentsByPrefecture(
@@ -466,7 +492,7 @@ async function countHaikuMonumentsByPrefecture(
 ): Promise<number> {
   const data = await fetchResource<HaikuMonumentResponse>(
     ENDPOINTS.HAIKU_MONUMENTS,
-    z.object({ haiku_monuments: z.array(HaikuMonumentSchema) }),
+    HaikuMonumentResponseSchema,
     undefined,
     { prefecture },
   );
@@ -487,10 +513,12 @@ async function fetchHaikuMonumentsByCoordinates(
     throw new Error("Invalid radius: radius must be greater than 0");
   }
 
-  const response = await fetchWithRetry(
-    `${CONFIG.API_BASE_URL}${ENDPOINTS.HAIKU_MONUMENTS}?lat=${lat}&lon=${lon}&radius=${radius}`,
+  const data = await fetchResource<HaikuMonumentResponse>(
+    ENDPOINTS.HAIKU_MONUMENTS,
+    HaikuMonumentResponseSchema,
+    undefined,
+    { lat: lat.toString(), lon: lon.toString(), radius: radius.toString() },
   );
-  const data = await handleApiResponse<HaikuMonumentResponse>(response);
   return data.haiku_monuments;
 }
 
@@ -887,38 +915,6 @@ server.tool(
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
   },
 );
-
-server.tool(
-  "clear_cache",
-  "キャッシュをクリアして最新データを取得",
-  {},
-  async () => {
-    const cacheSize = cache.size;
-    const memoryUsed = Math.round((currentCacheSize / 1024 / 1024) * 100) / 100;
-    clearCache();
-    return {
-      content: [
-        {
-          type: "text",
-          text: `キャッシュをクリアしました。削除されたエントリ数: ${cacheSize}, 解放されたメモリ: ${memoryUsed}MB`,
-        },
-      ],
-    };
-  },
-);
-
-server.tool("get_cache_status", "現在のキャッシュ状況を表示", {}, async () => {
-  const memoryUsed = Math.round((currentCacheSize / 1024 / 1024) * 100) / 100;
-  const memoryLimit = Math.round((CACHE_SIZE_LIMIT / 1024 / 1024) * 100) / 100;
-  return {
-    content: [
-      {
-        type: "text",
-        text: `キャッシュ状況:\n- エントリ数: ${cache.size}\n- 使用メモリ: ${memoryUsed}MB / ${memoryLimit}MB\n- 使用率: ${Math.round((currentCacheSize / CACHE_SIZE_LIMIT) * 100)}%`,
-      },
-    ],
-  };
-});
 
 async function main() {
   const transport = new StdioServerTransport();

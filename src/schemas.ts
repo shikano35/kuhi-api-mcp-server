@@ -67,20 +67,18 @@ export const HaikuMonumentSchema = z.object({
 });
 
 export const SearchOptionsSchema = z.object({
-  limit: z.number().min(1).max(MAX_LIMIT).optional(),
-  offset: z.number().min(0).optional(),
-  ordering: z.array(z.string()).optional(),
   search: z.string().optional(),
+  prefecture: z.string().optional(),
+  region: z.string().optional(),
   title_contains: z.string().optional(),
   description_contains: z.string().optional(),
   name_contains: z.string().optional(),
   biography_contains: z.string().optional(),
-  prefecture: z.string().optional(),
-  region: z.string().optional(),
-  created_at_gt: z.string().optional(),
-  created_at_lt: z.string().optional(),
-  updated_at_gt: z.string().optional(),
-  updated_at_lt: z.string().optional(),
+  limit: z.number().min(1).max(MAX_LIMIT).optional(),
+  offset: z.number().min(0).optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
+  radius: z.number().min(0).optional(),
 });
 
 export const SeasonEnum = z.enum(["春", "夏", "秋", "冬"]);
