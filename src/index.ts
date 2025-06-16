@@ -302,7 +302,7 @@ async function fetchWithRetry(
 }
 
 function safeArrayAccess<T>(
-  array: T[] | undefined,
+  array: readonly T[] | undefined,
   index: number,
 ): T | undefined {
   return array && array.length > index ? array[index] : undefined;

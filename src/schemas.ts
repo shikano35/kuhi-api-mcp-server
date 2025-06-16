@@ -13,9 +13,10 @@ const VALIDATION_LIMITS = {
 
 const IdSchema = z.number().int().positive();
 const TimestampSchema = z.string().datetime();
-const OptionalStringSchema = z.string().nullable().optional();
-const OptionalNumberSchema = z.number().nullable().optional();
+const OptionalStringSchema = z.string().nullable();
+const OptionalNumberSchema = z.number().nullable();
 
+// 俳人のスキーマ
 const PoetEmbeddedSchema = z.object({
   id: IdSchema,
   name: z.string(),
@@ -26,48 +27,53 @@ const PoetEmbeddedSchema = z.object({
   updated_at: TimestampSchema,
 });
 
+// 出典のスキーマ
 const SourceEmbeddedSchema = z.object({
   id: IdSchema,
   title: z.string(),
-  author: z.string(),
-  publisher: z.string(),
-  source_year: z.number().int(),
-  url: z.string().url(),
+  author: z.string().nullable(),
+  publisher: z.string().nullable(),
+  source_year: z.number().int().nullable(),
+  url: z.string().nullable(),
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
 });
 
+// 場所のスキーマ
 const LocationEmbeddedSchema = z.object({
   id: IdSchema,
   region: z.string(),
   prefecture: z.string(),
-  municipality: z.string().nullable().optional(),
-  address: z.string(),
-  place_name: z.string().nullable().optional(),
+  municipality: z.string().nullable(),
+  address: z.string().nullable(),
+  place_name: z.string().nullable(),
   latitude: z
     .number()
     .min(VALIDATION_LIMITS.LAT_MIN)
-    .max(VALIDATION_LIMITS.LAT_MAX),
+    .max(VALIDATION_LIMITS.LAT_MAX)
+    .nullable(),
   longitude: z
     .number()
     .min(VALIDATION_LIMITS.LON_MIN)
-    .max(VALIDATION_LIMITS.LON_MAX),
+    .max(VALIDATION_LIMITS.LON_MAX)
+    .nullable(),
 });
 
+// 句碑のスキーマ
 export const HaikuMonumentSchema = z.object({
   id: IdSchema,
   inscription: z.string(),
   commentary: OptionalStringSchema,
-  kigo: z.string().optional(),
-  season: z.string().optional(),
-  is_reliable: z.boolean().optional(),
-  has_reverse_inscription: z.boolean().nullable().optional(),
+  kigo: OptionalStringSchema,
+  season: OptionalStringSchema,
+  is_reliable: z.boolean().nullable(),
+  has_reverse_inscription: z.boolean().nullable(),
   material: OptionalStringSchema,
   total_height: OptionalNumberSchema,
   width: OptionalNumberSchema,
   depth: OptionalNumberSchema,
   established_date: z.string(),
-  established_year: OptionalStringSchema,
+  established_year: z.number().int().nullable(),
   founder: OptionalStringSchema,
   monument_type: OptionalStringSchema,
   designation_status: OptionalStringSchema,
