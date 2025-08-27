@@ -1,4 +1,4 @@
-import type { Monument } from "./types.js";
+import type { Monument } from "./schemas.js";
 
 export interface MonumentStatistics {
   readonly total: number;

@@ -41,16 +41,10 @@ import {
   MonumentsResponseSchema,
   PoetSchema,
   SourceSchema,
+  SearchOptionsSchema,
+  PoetsResponseSchema,
 } from "./schemas.js";
-import type {
-  GeoJSONFeature,
-  GeoJSONFeatureCollection,
-  Location,
-  Monument,
-  Poet,
-  SearchOptions,
-  Source,
-} from "./types.js";
+import type { GeoJSONFeature, GeoJSONFeatureCollection, Location, Monument, Poet, SearchOptions, Source } from "./types.js";
 import {
   formatMonumentForDisplay,
   formatStatisticsForDisplay,
@@ -59,7 +53,7 @@ import {
 
 const server = new McpServer({
   name: "kuhi-api-mcp-server",
-  version: "1.4.2",
+  version: "2.0.0",
 });
 
 interface CacheEntry<T> {
@@ -340,7 +334,7 @@ function buildApiUrl(
 }
 
 // API Functions
-async function fetchMonuments(options?: SearchOptions): Promise<unknown[]> {
+async function fetchMonuments(options?: SearchOptions): Promise<Monument[]> {
   const params = options
     ? Object.fromEntries(
         Object.entries(options)
@@ -349,16 +343,18 @@ async function fetchMonuments(options?: SearchOptions): Promise<unknown[]> {
       )
     : undefined;
 
-  return await fetchResource(
+  const raw = await fetchResource(
     ENDPOINTS.MONUMENTS,
     MonumentsResponseSchema,
     undefined,
     params,
   );
+  return raw.map(normalizeMonument);
 }
 
-async function fetchMonumentById(id: number): Promise<unknown> {
-  return await fetchResource(ENDPOINTS.MONUMENTS, MonumentSchema, id);
+async function fetchMonumentById(id: number): Promise<Monument> {
+  const raw = await fetchResource(ENDPOINTS.MONUMENTS, MonumentSchema, id);
+  return normalizeMonument(raw);
 }
 
 async function fetchPoets(options?: Partial<SearchOptions>): Promise<Poet[]> {
@@ -370,22 +366,18 @@ async function fetchPoets(options?: Partial<SearchOptions>): Promise<Poet[]> {
       )
     : undefined;
 
-  return await fetchResource<Poet[]>(
+  const raw = await fetchResource(
     ENDPOINTS.POETS,
-    undefined,
+    PoetsResponseSchema,
     undefined,
     params,
   );
+  return raw.map(normalizePoet);
 }
 
 async function fetchPoetById(id: number): Promise<Poet> {
   const data = await fetchResource(ENDPOINTS.POETS, PoetSchema, id);
-  return {
-    ...data,
-    biography: data.biography ?? null,
-    link_url: data.link_url ?? null,
-    image_url: data.image_url ?? null,
-  } as Poet;
+  return normalizePoet(data);
 }
 
 async function fetchHaikuMonumentsByPoet(
@@ -395,7 +387,7 @@ async function fetchHaikuMonumentsByPoet(
     `${ENDPOINTS.POETS}/${poetId}/monuments`,
     z.array(MonumentSchema),
   );
-  return data as Monument[];
+  return data.map(normalizeMonument);
 }
 
 async function fetchSources(
@@ -409,16 +401,18 @@ async function fetchSources(
       )
     : undefined;
 
-  return await fetchResource(
+  const raw = await fetchResource(
     ENDPOINTS.SOURCES,
     z.array(SourceSchema),
     undefined,
     params,
   );
+  return raw.map(normalizeSource);
 }
 
 async function fetchSourceById(id: number): Promise<Source> {
-  return await fetchResource(ENDPOINTS.SOURCES, SourceSchema, id);
+  const raw = await fetchResource(ENDPOINTS.SOURCES, SourceSchema, id);
+  return normalizeSource(raw);
 }
 
 async function fetchLocations(
@@ -455,7 +449,7 @@ async function fetchHaikuMonumentsByRegion(
     undefined,
     { region },
   );
-  return data as Monument[];
+  return data.map(normalizeMonument);
 }
 
 async function countHaikuMonumentsByPrefecture(
@@ -490,12 +484,10 @@ async function fetchHaikuMonumentsByCoordinates(
     undefined,
     { lat: lat.toString(), lon: lon.toString(), radius: radius.toString() },
   );
-  return data as Monument[];
+  return data.map(normalizeMonument);
 }
 
-function convertToGeoJSON(
-  monuments: Monument[],
-): GeoJSONFeatureCollection {
+function convertToGeoJSON(monuments: Monument[]): GeoJSONFeatureCollection {
   const features: GeoJSONFeature[] = monuments
     .filter((monument) => monument.locations && monument.locations.length > 0)
     .map((monument) => {
@@ -505,18 +497,20 @@ function convertToGeoJSON(
       const poem = safeArrayAccess(inscription?.poems, 0);
       const media = safeArrayAccess(monument.media, 0);
 
-      if (!location || location.longitude == null || location.latitude == null) {
+      if (
+        !location ||
+        location.longitude == null ||
+        location.latitude == null
+      ) {
         throw new Error(`Monument ${monument.id} has invalid location data`);
       }
 
+      const coordinates: [number, number] = [location.longitude, location.latitude];
       return {
         type: "Feature",
         geometry: {
           type: "Point",
-          coordinates: [location.longitude, location.latitude] as [
-            number,
-            number,
-          ],
+          coordinates: coordinates,
         },
         properties: {
           id: monument.id,
@@ -525,9 +519,9 @@ function convertToGeoJSON(
           commentary: inscription?.notes ?? null,
           media_url: media?.url ?? null,
           poet_name: poet?.name ?? "不明",
-          prefecture: location.prefecture,
-          region: location.region,
-          address: location.address,
+          prefecture: location.prefecture ?? null,
+          region: location.region ?? null,
+          address: location.address ?? null,
           place_name: location.place_name ?? null,
         },
       };
@@ -542,7 +536,7 @@ function convertToGeoJSON(
 async function generateGeoJSONFile(outputPath: string): Promise<void> {
   try {
     const monuments = await fetchMonuments();
-    const geojson = convertToGeoJSON(monuments as Monument[]);
+    const geojson = convertToGeoJSON(monuments);
 
     const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
@@ -565,7 +559,7 @@ async function getHaikuMonumentsStatistics(): Promise<{
   byPoet: Record<string, number>;
   bySeason: Record<string, number>;
 }> {
-  const monuments = await fetchMonuments() as Monument[];
+  const monuments = await fetchMonuments();
 
   const byPrefecture: Record<string, number> = {};
   const byRegion: Record<string, number> = {};
@@ -617,14 +611,14 @@ async function findSimilarMonuments(
     search: searchText,
     limit,
   };
-  return await fetchMonuments(searchOptions) as Monument[];
+  return await fetchMonuments(searchOptions);
 }
 
 async function getMonumentsBySeasonAndRegion(
   season: string,
   region?: string,
 ): Promise<Monument[]> {
-  const monuments = await fetchMonuments() as Monument[];
+  const monuments = await fetchMonuments();
 
   return monuments.filter((monument) => {
     const inscription = safeArrayAccess(monument.inscriptions, 0);
@@ -706,7 +700,7 @@ server.tool(
   },
   async ({ limit = CONFIG.DEFAULT_LIMIT, offset = 0 }) => {
     const searchOptions: SearchOptions = { limit, offset };
-    const data = await fetchMonuments(searchOptions) as Monument[];
+    const data = await fetchMonuments(searchOptions);
     const formatted = data.map(formatMonumentForDisplay).join("\n\n");
     return {
       content: [
@@ -725,7 +719,7 @@ server.tool(
   { id: z.number().describe("句碑ID") },
   async ({ id }) => {
     const validatedId = validateNumberInput(id, "句碑ID", 1);
-    const data = await fetchMonumentById(validatedId) as Monument;
+    const data = await fetchMonumentById(validatedId);
     const formatted = formatMonumentForDisplay(data);
     return {
       content: [
@@ -755,13 +749,10 @@ server.tool(
     offset: z.number().optional().describe("取得開始位置"),
   },
   async (options) => {
-    const searchOptions: SearchOptions = Object.fromEntries(
-      Object.entries(options)
-        .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => [key, value]),
-    ) as SearchOptions;
+    const searchOptions: SearchOptions =
+      SearchOptionsSchema.partial().parse(options);
 
-    const data = await fetchMonuments(searchOptions) as Monument[];
+    const data = await fetchMonuments(searchOptions);
     const formatted = data.map(formatMonumentForDisplay).join("\n\n");
     return {
       content: [
@@ -918,7 +909,7 @@ server.tool(
   "句碑データベースに登録されているすべての句碑の情報をGeoJSON形式で表示",
   {},
   async () => {
-    const monuments = await fetchMonuments() as Monument[];
+    const monuments = await fetchMonuments();
     const geojson = convertToGeoJSON(monuments);
     return { content: [{ type: "text", text: JSON.stringify(geojson) }] };
   },
@@ -970,14 +961,80 @@ server.tool(
 );
 
 // 型変換ヘルパー関数
-function transformZodToLocation(
-  zodData: z.infer<typeof LocationSchema>,
-): Location {
+function transformZodToLocation(data: unknown): Location {
+  const zodData = LocationSchema.parse(data);
   return {
     ...zodData,
+    prefecture: zodData.prefecture ?? null,
+    region: zodData.region ?? null,
     municipality: zodData.municipality ?? null,
+    address: zodData.address ?? null,
     place_name: zodData.place_name ?? null,
-  } as Location;
+    geohash: zodData.geohash ?? null,
+    geom_geojson: zodData.geom_geojson ?? null,
+    accuracy_m: zodData.accuracy_m ?? null,
+    geojson: zodData.geojson ?? null,
+  };
+}
+
+function normalizePoet(data: unknown): Poet {
+  const parsed = PoetSchema.parse(data);
+  return {
+    ...parsed,
+    name_kana: parsed.name_kana ?? null,
+    biography: parsed.biography ?? null,
+    birth_year: parsed.birth_year ?? null,
+    death_year: parsed.death_year ?? null,
+    link_url: parsed.link_url ?? null,
+    image_url: parsed.image_url ?? null,
+  };
+}
+
+function normalizeSource(data: unknown): Source {
+  const parsed = SourceSchema.parse(data);
+  return {
+    ...parsed,
+    author: parsed.author ?? null,
+    title: parsed.title ?? null,
+    publisher: parsed.publisher ?? null,
+    source_year: parsed.source_year ?? null,
+    url: parsed.url ?? null,
+  };
+}
+
+function normalizeMonument(data: unknown): Monument {
+  const parsed = MonumentSchema.parse(data);
+  return {
+    ...parsed,
+    monument_type: parsed.monument_type ?? null,
+    monument_type_uri: parsed.monument_type_uri ?? null,
+    material: parsed.material ?? null,
+    material_uri: parsed.material_uri ?? null,
+    inscriptions: parsed.inscriptions?.map((i) => ({
+      ...i,
+      side: i.side ?? "front",
+      original_text: i.original_text ?? null,
+      transliteration: i.transliteration ?? null,
+      reading: i.reading ?? null,
+      language: i.language ?? "ja",
+      notes: i.notes ?? null,
+      source_id: i.source_id ?? null,
+      poems: i.poems?.map((p) => ({
+        ...p,
+        kigo: p.kigo ?? null,
+        season: p.season ?? null,
+      })),
+      source: i.source ? normalizeSource(i.source) : undefined,
+    })) ?? undefined,
+    locations: parsed.locations?.map(transformZodToLocation) ?? undefined,
+    poets: parsed.poets?.map(normalizePoet) ?? undefined,
+    sources: parsed.sources?.map(normalizeSource) ?? undefined,
+    original_established_date: parsed.original_established_date ?? null,
+    hu_time_normalized: parsed.hu_time_normalized ?? null,
+    interval_start: parsed.interval_start ?? null,
+    interval_end: parsed.interval_end ?? null,
+    uncertainty_note: parsed.uncertainty_note ?? null,
+  };
 }
 
 async function main() {

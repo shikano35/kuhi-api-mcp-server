@@ -13,9 +13,9 @@ const VALIDATION_LIMITS = {
 } as const;
 
 const IdSchema = z.number().int().positive();
-const TimestampSchema = z.string().datetime().or(z.string());
-const OptionalStringSchema = z.string().nullable();
-const OptionalNumberSchema = z.number().nullable();
+const TimestampSchema = z.string().optional().default("");
+const OptionalStringSchema = z.string().nullable().optional().default(null);
+const OptionalNumberSchema = z.number().nullable().optional().default(null);
 
 // 俳人のスキーマ
 export const PoetSchema = z.object({
@@ -23,8 +23,8 @@ export const PoetSchema = z.object({
   name: z.string(),
   name_kana: OptionalStringSchema,
   biography: OptionalStringSchema,
-  birth_year: z.number().int().nullable(),
-  death_year: z.number().int().nullable(),
+  birth_year: z.number().int().nullable().optional(),
+  death_year: z.number().int().nullable().optional(),
   link_url: OptionalStringSchema,
   image_url: OptionalStringSchema,
   created_at: TimestampSchema,
@@ -38,7 +38,7 @@ export const SourceSchema = z.object({
   author: OptionalStringSchema,
   title: OptionalStringSchema,
   publisher: OptionalStringSchema,
-  source_year: z.number().int().nullable(),
+  source_year: z.number().int().nullable().optional(),
   url: OptionalStringSchema,
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
@@ -90,7 +90,7 @@ export const PoemAttributionSchema = z.object({
   poet_id: IdSchema,
   confidence: z.string().default("certain"),
   confidence_score: z.number().default(1),
-  source_id: z.number().nullable(),
+  source_id: z.number().nullable().optional(),
   created_at: TimestampSchema,
   poet: PoetSchema,
   source: SourceSchema.nullable(),
@@ -117,9 +117,9 @@ export const InscriptionSchema = z.object({
   original_text: OptionalStringSchema,
   transliteration: OptionalStringSchema,
   reading: OptionalStringSchema,
-  language: z.string().optional().default("ja"),
+  language: z.string().default("ja"),
   notes: OptionalStringSchema,
-  source_id: z.number().nullable(),
+  source_id: z.number().nullable().optional(),
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
   poems: z.array(PoemSchema).optional(),
@@ -151,8 +151,8 @@ export const MediaSchema = z.object({
   photographer: OptionalStringSchema,
   license: OptionalStringSchema,
   exif_json: OptionalStringSchema.optional(),
-  created_at: TimestampSchema.optional(),
-  updated_at: TimestampSchema.optional(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
 });
 
 // 句碑のスキーマ
