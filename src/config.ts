@@ -1,5 +1,5 @@
 export const CONFIG = {
-  API_BASE_URL: "https://api.kuhiapi.com",
+  API_BASE_URL: "https://api.kuhi.jp",
   DEFAULT_LIMIT: 50,
   MAX_LIMIT: 1000,
   REQUEST_TIMEOUT: 30000,
@@ -8,7 +8,9 @@ export const CONFIG = {
 } as const;
 
 export const ENDPOINTS = {
-  HAIKU_MONUMENTS: "/haiku-monuments",
+  MONUMENTS: "/monuments",
+  INSCRIPTIONS: "/inscriptions",
+  POEMS: "/poems",
   POETS: "/poets",
   SOURCES: "/sources",
   LOCATIONS: "/locations",

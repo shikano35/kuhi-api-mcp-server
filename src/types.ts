@@ -8,65 +8,154 @@ interface BaseEntity {
 // 俳人
 export interface Poet extends BaseEntity {
   readonly name: string;
+  readonly name_kana: string | null;
   readonly biography: string | null;
+  readonly birth_year: number | null;
+  readonly death_year: number | null;
   readonly link_url: string | null;
   readonly image_url: string | null;
 }
 
 // 出典
 export interface Source extends BaseEntity {
-  readonly title: string;
+  readonly citation: string;
   readonly author: string | null;
+  readonly title: string | null;
   readonly publisher: string | null;
   readonly source_year: number | null;
   readonly url: string | null;
 }
 
+// 出典
+export interface SourceWithMonuments extends Source {
+  readonly monuments?: readonly Monument[];
+}
+
 // 場所
-export interface Location {
-  readonly id: number;
-  readonly region: string;
-  readonly prefecture: string;
+export interface Location extends BaseEntity {
+  readonly imi_pref_code: string | null;
+  readonly region: string | null;
+  readonly prefecture: string | null;
   readonly municipality: string | null;
   readonly address: string | null;
   readonly place_name: string | null;
   readonly latitude: number | null;
   readonly longitude: number | null;
+  readonly geohash: string | null;
+  readonly geom_geojson: string | null;
+  readonly accuracy_m: number | null;
+  readonly geojson?: string | null;
+}
+
+// 俳句
+export interface Poem extends BaseEntity {
+  readonly text: string;
+  readonly normalized_text: string;
+  readonly text_hash: string;
+  readonly kigo: string | null;
+  readonly season: string | null;
+}
+
+// 俳句の帰属
+export interface PoemAttribution extends BaseEntity {
+  readonly poem_id: number;
+  readonly poet_id: number;
+  readonly confidence: string;
+  readonly confidence_score: number;
+  readonly source_id: number | null;
+  readonly poet: Poet;
+  readonly source: Source | null;
+}
+
+// 俳句
+export interface PoemWithDetails extends Poem {
+  readonly attributions?: readonly PoemAttribution[];
+  readonly inscriptions?: readonly Inscription[];
+}
+
+// 碑文
+export interface Inscription extends BaseEntity {
+  readonly monument_id?: number;
+  readonly side: string;
+  readonly original_text: string | null;
+  readonly transliteration: string | null;
+  readonly reading: string | null;
+  readonly language: string;
+  readonly notes: string | null;
+  readonly source_id: number | null;
+  readonly poems?: readonly Poem[];
+  readonly monument?: Monument;
+  readonly source?: Source;
+}
+
+// イベント
+export interface Event extends BaseEntity {
+  readonly monument_id?: number;
+  readonly event_type: string;
+  readonly hu_time_normalized: string | null;
+  readonly interval_start: string | null;
+  readonly interval_end: string | null;
+  readonly uncertainty_note: string | null;
+  readonly actor: string | null;
+  readonly source: Source | null;
+}
+
+// メディア
+export interface Media extends BaseEntity {
+  readonly monument_id?: number;
+  readonly media_type: string;
+  readonly url: string;
+  readonly iiif_manifest_url: string | null;
+  readonly captured_at: string | null;
+  readonly photographer: string | null;
+  readonly license: string | null;
+  readonly exif_json?: string | null;
 }
 
 // 句碑
-export interface HaikuMonument extends BaseEntity {
-  readonly inscription: string;
-  readonly commentary: string | null;
-  readonly kigo: string | null;
-  readonly season: string | null;
-  readonly is_reliable: boolean | null;
-  readonly has_reverse_inscription: boolean | null;
-  readonly material: string | null;
-  readonly total_height: number | null;
-  readonly width: number | null;
-  readonly depth: number | null;
-  readonly established_date: string;
-  readonly established_year: number | null;
-  readonly founder: string | null;
+export interface Monument extends BaseEntity {
+  readonly canonical_name: string;
+  readonly canonical_uri: string;
   readonly monument_type: string | null;
-  readonly designation_status: string | null;
-  readonly photo_url: string | null;
-  readonly photo_date: string | null;
-  readonly photographer: string | null;
-  readonly model_3d_url: string | null;
-  readonly remarks: string | null;
-  readonly poet_id: number;
-  readonly source_id: number;
-  readonly location_id: number;
-  readonly poets: readonly Poet[];
-  readonly sources: readonly Source[];
-  readonly locations: readonly Location[];
+  readonly monument_type_uri: string | null;
+  readonly material: string | null;
+  readonly material_uri: string | null;
+  readonly inscriptions?: readonly Inscription[] | undefined;
+  readonly events?: readonly Event[] | undefined;
+  readonly media?: readonly Media[] | undefined;
+  readonly locations?: readonly Location[] | undefined;
+  readonly poets?: readonly Poet[] | undefined;
+  readonly sources?: readonly Source[] | undefined;
+  readonly original_established_date: string | null;
+  readonly hu_time_normalized: string | null;
+  readonly interval_start: string | null;
+  readonly interval_end: string | null;
+  readonly uncertainty_note: string | null;
 }
 
 // API レスポンス
-export interface HaikuMonumentResponse {
-  readonly haiku_monuments: readonly HaikuMonument[];
+export interface MonumentsResponse {
+  readonly monuments: readonly Monument[];
+}
+
+export interface InscriptionsResponse {
+  readonly inscriptions: readonly Inscription[];
+}
+
+export interface PoemsResponse {
+  readonly poems: readonly PoemWithDetails[];
+}
+
+export interface PoetsResponse {
+  readonly poets: readonly Poet[];
+}
+
+export interface SourcesResponse {
+  readonly sources: readonly Source[];
+}
+
+export interface LocationsResponse {
+  readonly locations: readonly Location[];
 }
 
 // GeoJSON 関連
@@ -79,12 +168,12 @@ export interface GeoJSONFeature {
   readonly properties: {
     readonly id: number;
     readonly inscription: string;
-    readonly established_date: string;
+    readonly canonical_name: string;
     readonly commentary: string | null;
-    readonly photo_url: string | null;
+    readonly media_url: string | null;
     readonly poet_name: string;
-    readonly prefecture: string;
-    readonly region: string;
+    readonly prefecture: string | null;
+    readonly region: string | null;
     readonly address: string | null;
     readonly place_name: string | null;
   };
@@ -99,18 +188,37 @@ export interface GeoJSONFeatureCollection {
 export interface SearchOptions {
   readonly limit?: number;
   readonly offset?: number;
-  readonly ordering?: readonly string[];
+  readonly ordering?: string;
+  readonly q?: string;
   readonly search?: string;
-  readonly title_contains?: string;
-  readonly description_contains?: string;
-  readonly name_contains?: string;
-  readonly biography_contains?: string;
+  readonly inscription_contains?: string;
+  readonly commentary_contains?: string;
+  readonly poet_name_contains?: string;
+  readonly poet_id?: number;
+  readonly kigo?: string;
+  readonly season?: string;
+  readonly material?: string;
+  readonly monument_type?: string;
   readonly prefecture?: string;
   readonly region?: string;
+  readonly location_id?: number;
+  readonly bbox?: string;
+  readonly established_start?: string;
+  readonly established_end?: string;
+  readonly has_media?: string;
+  readonly uncertain?: string;
+  readonly expand?: string;
+  readonly text_contains?: string;
+  readonly name_contains?: string;
+  readonly biography_contains?: string;
+  readonly title_contains?: string;
+  readonly author_contains?: string;
   readonly created_at_gt?: string;
   readonly created_at_lt?: string;
   readonly updated_at_gt?: string;
   readonly updated_at_lt?: string;
+  readonly monument_id?: number;
+  readonly language?: string;
 }
 
 // API レスポンス
