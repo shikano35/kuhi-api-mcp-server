@@ -1,4 +1,4 @@
-import type { HaikuMonument } from "./types.js";
+import type { Monument } from "./schemas.js";
 
 export interface MonumentStatistics {
   readonly total: number;
@@ -31,17 +31,25 @@ const SEASON_MAP: Readonly<Record<string, string>> = {
   ふゆ: "冬",
 } as const;
 
-export function formatHaikuMonumentForDisplay(monument: HaikuMonument): string {
-  const poet = monument.poets[0];
-  const location = monument.locations[0];
+export function formatMonumentForDisplay(monument: Monument): string {
+  const poet = monument.poets?.[0];
+  const location = monument.locations?.[0];
+  const inscription = monument.inscriptions?.[0];
+  const poem = inscription?.poems?.[0];
+
   return `【句碑ID: ${monument.id}】
-句: ${monument.inscription}
+名称: ${monument.canonical_name}
+俳句: ${poem?.text ?? inscription?.original_text ?? "記載なし"}
 俳人: ${poet?.name ?? "不明"}
 設置場所: ${location?.prefecture ?? ""} ${location?.region ?? ""} ${location?.address ?? ""}
-建立日: ${monument.established_date}
-解説: ${monument.commentary ?? "なし"}
-季語: ${monument.kigo ?? "なし"}
-季節: ${monument.season ?? "不明"}`;
+解説: ${inscription?.notes ?? "なし"}
+季語: ${poem?.kigo ?? "なし"}
+季節: ${poem?.season ?? "不明"}`;
+}
+
+// Legacy compatibility
+export function formatHaikuMonumentForDisplay(monument: Monument): string {
+  return formatMonumentForDisplay(monument);
 }
 
 export function formatStatisticsForDisplay(

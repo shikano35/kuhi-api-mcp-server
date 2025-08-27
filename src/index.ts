@@ -36,30 +36,24 @@ import { z } from "zod";
 import { CONFIG, ENDPOINTS } from "./config.js";
 import { logger } from "./logger.js";
 import {
-  HaikuMonumentResponseSchema,
-  HaikuMonumentSchema,
   LocationSchema,
+  MonumentSchema,
+  MonumentsResponseSchema,
   PoetSchema,
   SourceSchema,
+  SearchOptionsSchema,
+  PoetsResponseSchema,
 } from "./schemas.js";
-import type {
-  GeoJSONFeature,
-  GeoJSONFeatureCollection,
-  HaikuMonument,
-  Location,
-  Poet,
-  SearchOptions,
-  Source,
-} from "./types.js";
+import type { GeoJSONFeature, GeoJSONFeatureCollection, Location, Monument, Poet, SearchOptions, Source } from "./types.js";
 import {
-  formatHaikuMonumentForDisplay,
+  formatMonumentForDisplay,
   formatStatisticsForDisplay,
   validateCoordinates,
 } from "./utils.js";
 
 const server = new McpServer({
   name: "kuhi-api-mcp-server",
-  version: "1.4.2",
+  version: "2.0.0",
 });
 
 interface CacheEntry<T> {
@@ -88,19 +82,20 @@ function getCacheKey(url: string, params?: Record<string, unknown>): string {
 }
 
 function getFromCache<T>(key: string): T | null {
-  const entry = cache.get(key) as CacheEntry<T> | undefined;
+  const entry = cache.get(key);
   if (!entry) {
     return null;
   }
 
-  if (Date.now() - entry.timestamp > CONFIG.CACHE_DURATION) {
+  const typedEntry = entry as CacheEntry<T>;
+  if (Date.now() - typedEntry.timestamp > CONFIG.CACHE_DURATION) {
     cache.delete(key);
-    currentCacheSize -= entry.size;
+    currentCacheSize -= typedEntry.size;
     return null;
   }
 
-  entry.lastAccessed = Date.now();
-  return entry.data;
+  typedEntry.lastAccessed = Date.now();
+  return typedEntry.data;
 }
 
 function setCache<T>(key: string, data: T): void {
@@ -124,9 +119,12 @@ function setCache<T>(key: string, data: T): void {
 
     if (!oldestKey) break;
 
-    const oldEntry = cache.get(oldestKey) as CacheEntry<unknown>;
-    cache.delete(oldestKey);
-    currentCacheSize -= oldEntry.size;
+    const oldEntry = cache.get(oldestKey);
+    if (oldEntry) {
+      const typedOldEntry = oldEntry as CacheEntry<unknown>;
+      cache.delete(oldestKey);
+      currentCacheSize -= typedOldEntry.size;
+    }
   }
 
   const now = Date.now();
@@ -180,7 +178,7 @@ async function fetchResource<T>(
 
   if (schema && !options.skipValidation) {
     try {
-      const validatedData = schema.parse(rawData) as T;
+      const validatedData = schema.parse(rawData);
       setCache(cacheKey, validatedData);
       return validatedData;
     } catch (error) {
@@ -198,12 +196,12 @@ async function fetchResource<T>(
         });
       }
 
-      setCache(cacheKey, rawData as T);
+      setCache(cacheKey, rawData);
       return rawData as T;
     }
   }
 
-  setCache(cacheKey, rawData as T);
+  setCache(cacheKey, rawData);
   return rawData as T;
 }
 
@@ -219,7 +217,7 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
       throw new Error("Empty response body");
     }
 
-    return JSON.parse(text) as T;
+    return JSON.parse(text);
   } catch (error) {
     throw new Error(
       `Failed to parse response: ${error instanceof Error ? error.message : String(error)}`,
@@ -336,39 +334,27 @@ function buildApiUrl(
 }
 
 // API Functions
-async function fetchHaikuMonuments(): Promise<HaikuMonument[]> {
-  const data = await fetchResource(
-    ENDPOINTS.HAIKU_MONUMENTS,
-    HaikuMonumentResponseSchema,
-  );
-  return data.haiku_monuments.map(transformZodToHaikuMonument);
-}
+async function fetchMonuments(options?: SearchOptions): Promise<Monument[]> {
+  const params = options
+    ? Object.fromEntries(
+        Object.entries(options)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([key, value]) => [key, String(value)]),
+      )
+    : undefined;
 
-async function fetchHaikuMonumentById(id: number): Promise<HaikuMonument> {
-  const data = await fetchResource(
-    ENDPOINTS.HAIKU_MONUMENTS,
-    HaikuMonumentSchema,
-    id,
-  );
-  return transformZodToHaikuMonument(data);
-}
-
-async function searchHaikuMonuments(
-  options: SearchOptions,
-): Promise<HaikuMonument[]> {
-  const params = Object.fromEntries(
-    Object.entries(options)
-      .filter(([, value]) => value !== undefined && value !== null)
-      .map(([key, value]) => [key, String(value)]),
-  );
-
-  const data = await fetchResource(
-    ENDPOINTS.HAIKU_MONUMENTS,
-    HaikuMonumentResponseSchema,
+  const raw = await fetchResource(
+    ENDPOINTS.MONUMENTS,
+    MonumentsResponseSchema,
     undefined,
     params,
   );
-  return data.haiku_monuments.map(transformZodToHaikuMonument);
+  return raw.map(normalizeMonument);
+}
+
+async function fetchMonumentById(id: number): Promise<Monument> {
+  const raw = await fetchResource(ENDPOINTS.MONUMENTS, MonumentSchema, id);
+  return normalizeMonument(raw);
 }
 
 async function fetchPoets(options?: Partial<SearchOptions>): Promise<Poet[]> {
@@ -380,32 +366,28 @@ async function fetchPoets(options?: Partial<SearchOptions>): Promise<Poet[]> {
       )
     : undefined;
 
-  return await fetchResource<Poet[]>(
+  const raw = await fetchResource(
     ENDPOINTS.POETS,
-    undefined,
+    PoetsResponseSchema,
     undefined,
     params,
   );
+  return raw.map(normalizePoet);
 }
 
 async function fetchPoetById(id: number): Promise<Poet> {
   const data = await fetchResource(ENDPOINTS.POETS, PoetSchema, id);
-  return {
-    ...data,
-    biography: data.biography ?? null,
-    link_url: data.link_url ?? null,
-    image_url: data.image_url ?? null,
-  } as Poet;
+  return normalizePoet(data);
 }
 
 async function fetchHaikuMonumentsByPoet(
   poetId: number,
-): Promise<HaikuMonument[]> {
+): Promise<Monument[]> {
   const data = await fetchResource(
-    `${ENDPOINTS.POETS}/${poetId}${ENDPOINTS.HAIKU_MONUMENTS}`,
-    z.array(HaikuMonumentSchema),
+    `${ENDPOINTS.POETS}/${poetId}/monuments`,
+    z.array(MonumentSchema),
   );
-  return data.map(transformZodToHaikuMonument);
+  return data.map(normalizeMonument);
 }
 
 async function fetchSources(
@@ -419,16 +401,18 @@ async function fetchSources(
       )
     : undefined;
 
-  return await fetchResource(
+  const raw = await fetchResource(
     ENDPOINTS.SOURCES,
     z.array(SourceSchema),
     undefined,
     params,
   );
+  return raw.map(normalizeSource);
 }
 
 async function fetchSourceById(id: number): Promise<Source> {
-  return await fetchResource(ENDPOINTS.SOURCES, SourceSchema, id);
+  const raw = await fetchResource(ENDPOINTS.SOURCES, SourceSchema, id);
+  return normalizeSource(raw);
 }
 
 async function fetchLocations(
@@ -458,33 +442,33 @@ async function fetchLocationById(id: number): Promise<Location> {
 
 async function fetchHaikuMonumentsByRegion(
   region: string,
-): Promise<HaikuMonument[]> {
+): Promise<Monument[]> {
   const data = await fetchResource(
-    ENDPOINTS.HAIKU_MONUMENTS,
-    HaikuMonumentResponseSchema,
+    ENDPOINTS.MONUMENTS,
+    MonumentsResponseSchema,
     undefined,
     { region },
   );
-  return data.haiku_monuments.map(transformZodToHaikuMonument);
+  return data.map(normalizeMonument);
 }
 
 async function countHaikuMonumentsByPrefecture(
   prefecture: string,
 ): Promise<number> {
   const data = await fetchResource(
-    ENDPOINTS.HAIKU_MONUMENTS,
-    HaikuMonumentResponseSchema,
+    ENDPOINTS.MONUMENTS,
+    MonumentsResponseSchema,
     undefined,
     { prefecture },
   );
-  return data.haiku_monuments.length;
+  return data.length;
 }
 
 async function fetchHaikuMonumentsByCoordinates(
   lat: number,
   lon: number,
   radius: number,
-): Promise<HaikuMonument[]> {
+): Promise<Monument[]> {
   if (!validateCoordinates(lat, lon)) {
     throw new Error(
       "Invalid coordinates: latitude must be between -90 and 90, longitude must be between -180 and 180",
@@ -495,46 +479,49 @@ async function fetchHaikuMonumentsByCoordinates(
   }
 
   const data = await fetchResource(
-    ENDPOINTS.HAIKU_MONUMENTS,
-    HaikuMonumentResponseSchema,
+    ENDPOINTS.MONUMENTS,
+    MonumentsResponseSchema,
     undefined,
     { lat: lat.toString(), lon: lon.toString(), radius: radius.toString() },
   );
-  return data.haiku_monuments.map(transformZodToHaikuMonument);
+  return data.map(normalizeMonument);
 }
 
-function convertToGeoJSON(
-  monuments: HaikuMonument[],
-): GeoJSONFeatureCollection {
+function convertToGeoJSON(monuments: Monument[]): GeoJSONFeatureCollection {
   const features: GeoJSONFeature[] = monuments
     .filter((monument) => monument.locations && monument.locations.length > 0)
     .map((monument) => {
       const location = safeArrayAccess(monument.locations, 0);
       const poet = safeArrayAccess(monument.poets, 0);
+      const inscription = safeArrayAccess(monument.inscriptions, 0);
+      const poem = safeArrayAccess(inscription?.poems, 0);
+      const media = safeArrayAccess(monument.media, 0);
 
-      if (!location) {
-        throw new Error(`Monument ${monument.id} has no location data`);
+      if (
+        !location ||
+        location.longitude == null ||
+        location.latitude == null
+      ) {
+        throw new Error(`Monument ${monument.id} has invalid location data`);
       }
 
+      const coordinates: [number, number] = [location.longitude, location.latitude];
       return {
         type: "Feature",
         geometry: {
           type: "Point",
-          coordinates: [location.longitude, location.latitude] as [
-            number,
-            number,
-          ],
+          coordinates: coordinates,
         },
         properties: {
           id: monument.id,
-          inscription: monument.inscription,
-          established_date: monument.established_date,
-          commentary: monument.commentary ?? null,
-          photo_url: monument.photo_url ?? null,
+          inscription: poem?.text || inscription?.original_text || "",
+          canonical_name: monument.canonical_name,
+          commentary: inscription?.notes ?? null,
+          media_url: media?.url ?? null,
           poet_name: poet?.name ?? "不明",
-          prefecture: location.prefecture,
-          region: location.region,
-          address: location.address,
+          prefecture: location.prefecture ?? null,
+          region: location.region ?? null,
+          address: location.address ?? null,
           place_name: location.place_name ?? null,
         },
       };
@@ -548,7 +535,7 @@ function convertToGeoJSON(
 
 async function generateGeoJSONFile(outputPath: string): Promise<void> {
   try {
-    const monuments = await fetchHaikuMonuments();
+    const monuments = await fetchMonuments();
     const geojson = convertToGeoJSON(monuments);
 
     const outputDir = path.dirname(outputPath);
@@ -572,7 +559,7 @@ async function getHaikuMonumentsStatistics(): Promise<{
   byPoet: Record<string, number>;
   bySeason: Record<string, number>;
 }> {
-  const monuments = await fetchHaikuMonuments();
+  const monuments = await fetchMonuments();
 
   const byPrefecture: Record<string, number> = {};
   const byRegion: Record<string, number> = {};
@@ -582,6 +569,8 @@ async function getHaikuMonumentsStatistics(): Promise<{
   for (const monument of monuments) {
     const location = safeArrayAccess(monument.locations, 0);
     const poet = safeArrayAccess(monument.poets, 0);
+    const inscription = safeArrayAccess(monument.inscriptions, 0);
+    const poem = safeArrayAccess(inscription?.poems, 0);
 
     // 都道府県別
     if (location?.prefecture) {
@@ -600,8 +589,8 @@ async function getHaikuMonumentsStatistics(): Promise<{
     }
 
     // 季節別
-    if (monument.season) {
-      bySeason[monument.season] = (bySeason[monument.season] || 0) + 1;
+    if (poem?.season) {
+      bySeason[poem.season] = (bySeason[poem.season] || 0) + 1;
     }
   }
 
@@ -617,22 +606,24 @@ async function getHaikuMonumentsStatistics(): Promise<{
 async function findSimilarMonuments(
   searchText: string,
   limit = 5,
-): Promise<HaikuMonument[]> {
+): Promise<Monument[]> {
   const searchOptions: SearchOptions = {
     search: searchText,
     limit,
   };
-  return await searchHaikuMonuments(searchOptions);
+  return await fetchMonuments(searchOptions);
 }
 
 async function getMonumentsBySeasonAndRegion(
   season: string,
   region?: string,
-): Promise<HaikuMonument[]> {
-  const monuments = await fetchHaikuMonuments();
+): Promise<Monument[]> {
+  const monuments = await fetchMonuments();
 
   return monuments.filter((monument) => {
-    const matchesSeason = monument.season === season;
+    const inscription = safeArrayAccess(monument.inscriptions, 0);
+    const poem = safeArrayAccess(inscription?.poems, 0);
+    const matchesSeason = poem?.season === season;
     const location = safeArrayAccess(monument.locations, 0);
     const matchesRegion = !region || location?.region === region;
     return matchesSeason && matchesRegion;
@@ -709,12 +700,13 @@ server.tool(
   },
   async ({ limit = CONFIG.DEFAULT_LIMIT, offset = 0 }) => {
     const searchOptions: SearchOptions = { limit, offset };
-    const data = await searchHaikuMonuments(searchOptions);
+    const data = await fetchMonuments(searchOptions);
+    const formatted = data.map(formatMonumentForDisplay).join("\n\n");
     return {
       content: [
         {
           type: "text",
-          text: `句碑データ（${data.length}件）:\n${JSON.stringify(data, null, 2)}`,
+          text: `句碑データ（${data.length}件）:\n${formatted}`,
         },
       ],
     };
@@ -727,8 +719,8 @@ server.tool(
   { id: z.number().describe("句碑ID") },
   async ({ id }) => {
     const validatedId = validateNumberInput(id, "句碑ID", 1);
-    const data = await fetchHaikuMonumentById(validatedId);
-    const formatted = formatHaikuMonumentForDisplay(data);
+    const data = await fetchMonumentById(validatedId);
+    const formatted = formatMonumentForDisplay(data);
     return {
       content: [
         { type: "text", text: formatted },
@@ -757,14 +749,11 @@ server.tool(
     offset: z.number().optional().describe("取得開始位置"),
   },
   async (options) => {
-    const searchOptions: SearchOptions = Object.fromEntries(
-      Object.entries(options)
-        .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => [key, value]),
-    ) as SearchOptions;
+    const searchOptions: SearchOptions =
+      SearchOptionsSchema.partial().parse(options);
 
-    const data = await searchHaikuMonuments(searchOptions);
-    const formatted = data.map(formatHaikuMonumentForDisplay).join("\n\n");
+    const data = await fetchMonuments(searchOptions);
+    const formatted = data.map(formatMonumentForDisplay).join("\n\n");
     return {
       content: [
         {
@@ -872,7 +861,7 @@ server.tool(
   { region: z.string().describe("地域名") },
   async ({ region }) => {
     const data = await fetchHaikuMonumentsByRegion(region);
-    const formatted = data.map(formatHaikuMonumentForDisplay).join("\n\n");
+    const formatted = data.map(formatMonumentForDisplay).join("\n\n");
     return {
       content: [
         {
@@ -920,7 +909,7 @@ server.tool(
   "句碑データベースに登録されているすべての句碑の情報をGeoJSON形式で表示",
   {},
   async () => {
-    const monuments = await fetchHaikuMonuments();
+    const monuments = await fetchMonuments();
     const geojson = convertToGeoJSON(monuments);
     return { content: [{ type: "text", text: JSON.stringify(geojson) }] };
   },
@@ -972,51 +961,80 @@ server.tool(
 );
 
 // 型変換ヘルパー関数
-function transformZodToHaikuMonument(
-  zodData: z.infer<typeof HaikuMonumentSchema>,
-): HaikuMonument {
+function transformZodToLocation(data: unknown): Location {
+  const zodData = LocationSchema.parse(data);
   return {
     ...zodData,
-    commentary: zodData.commentary ?? null,
-    kigo: zodData.kigo ?? null,
-    season: zodData.season ?? null,
-    is_reliable: zodData.is_reliable ?? null,
-    has_reverse_inscription: zodData.has_reverse_inscription ?? null,
-    material: zodData.material ?? null,
-    total_height: zodData.total_height ?? null,
-    width: zodData.width ?? null,
-    depth: zodData.depth ?? null,
-    established_year: zodData.established_year ?? null,
-    founder: zodData.founder ?? null,
-    monument_type: zodData.monument_type ?? null,
-    designation_status: zodData.designation_status ?? null,
-    photo_url: zodData.photo_url ?? null,
-    photo_date: zodData.photo_date ?? null,
-    photographer: zodData.photographer ?? null,
-    model_3d_url: zodData.model_3d_url ?? null,
-    remarks: zodData.remarks ?? null,
-    poets: zodData.poets.map((poet) => ({
-      ...poet,
-      biography: poet.biography ?? null,
-      link_url: poet.link_url ?? null,
-      image_url: poet.image_url ?? null,
-    })),
-    locations: zodData.locations.map((location) => ({
-      ...location,
-      municipality: location.municipality ?? null,
-      place_name: location.place_name ?? null,
-    })),
-  } as HaikuMonument;
+    prefecture: zodData.prefecture ?? null,
+    region: zodData.region ?? null,
+    municipality: zodData.municipality ?? null,
+    address: zodData.address ?? null,
+    place_name: zodData.place_name ?? null,
+    geohash: zodData.geohash ?? null,
+    geom_geojson: zodData.geom_geojson ?? null,
+    accuracy_m: zodData.accuracy_m ?? null,
+    geojson: zodData.geojson ?? null,
+  };
 }
 
-function transformZodToLocation(
-  zodData: z.infer<typeof LocationSchema>,
-): Location {
+function normalizePoet(data: unknown): Poet {
+  const parsed = PoetSchema.parse(data);
   return {
-    ...zodData,
-    municipality: zodData.municipality ?? null,
-    place_name: zodData.place_name ?? null,
-  } as Location;
+    ...parsed,
+    name_kana: parsed.name_kana ?? null,
+    biography: parsed.biography ?? null,
+    birth_year: parsed.birth_year ?? null,
+    death_year: parsed.death_year ?? null,
+    link_url: parsed.link_url ?? null,
+    image_url: parsed.image_url ?? null,
+  };
+}
+
+function normalizeSource(data: unknown): Source {
+  const parsed = SourceSchema.parse(data);
+  return {
+    ...parsed,
+    author: parsed.author ?? null,
+    title: parsed.title ?? null,
+    publisher: parsed.publisher ?? null,
+    source_year: parsed.source_year ?? null,
+    url: parsed.url ?? null,
+  };
+}
+
+function normalizeMonument(data: unknown): Monument {
+  const parsed = MonumentSchema.parse(data);
+  return {
+    ...parsed,
+    monument_type: parsed.monument_type ?? null,
+    monument_type_uri: parsed.monument_type_uri ?? null,
+    material: parsed.material ?? null,
+    material_uri: parsed.material_uri ?? null,
+    inscriptions: parsed.inscriptions?.map((i) => ({
+      ...i,
+      side: i.side ?? "front",
+      original_text: i.original_text ?? null,
+      transliteration: i.transliteration ?? null,
+      reading: i.reading ?? null,
+      language: i.language ?? "ja",
+      notes: i.notes ?? null,
+      source_id: i.source_id ?? null,
+      poems: i.poems?.map((p) => ({
+        ...p,
+        kigo: p.kigo ?? null,
+        season: p.season ?? null,
+      })),
+      source: i.source ? normalizeSource(i.source) : undefined,
+    })) ?? undefined,
+    locations: parsed.locations?.map(transformZodToLocation) ?? undefined,
+    poets: parsed.poets?.map(normalizePoet) ?? undefined,
+    sources: parsed.sources?.map(normalizeSource) ?? undefined,
+    original_established_date: parsed.original_established_date ?? null,
+    hu_time_normalized: parsed.hu_time_normalized ?? null,
+    interval_start: parsed.interval_start ?? null,
+    interval_end: parsed.interval_end ?? null,
+    uncertainty_note: parsed.uncertainty_note ?? null,
+  };
 }
 
 async function main() {

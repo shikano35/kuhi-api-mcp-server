@@ -257,7 +257,7 @@ pnpm run lint
 
 ## API 仕様
 
-この MCP サーバーは [句碑 API](https://api.kuhiapi.com) を使用しています。
+この MCP サーバーは [句碑 API](https://api.kuhi.jp) を使用しています。
 詳細な API 仕様については、API ドキュメントを参照してください。
 
 ## ライセンス
@@ -267,6 +267,6 @@ MIT License
 ## 関連リンク
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- [句碑 API](https://developers.kuhiapi.com/)
+- [句碑 API](https://developers.kuhi.jp/)
 - [Claude Desktop](https://claude.ai/download)
 - [Cursor](https://www.cursor.com/)
