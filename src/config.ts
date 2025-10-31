@@ -1,7 +1,7 @@
 export const CONFIG = {
   API_BASE_URL: "https://api.kuhi.jp",
   DEFAULT_LIMIT: 50,
-  MAX_LIMIT: 1000,
+  MAX_LIMIT: 100,
   REQUEST_TIMEOUT: 30000,
   RETRY_ATTEMPTS: 3,
   CACHE_DURATION: 300000,

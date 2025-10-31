@@ -1,19 +1,19 @@
-import { z } from "zod";
-import {
+import type { z } from "zod";
+import type {
   EventSchema,
   InscriptionSchema,
+  InscriptionsResponseSchema,
   LocationSchema,
+  LocationsResponseSchema,
   MediaSchema,
   MonumentSchema,
-  PoetSchema,
+  MonumentsResponseSchema,
   PoemsResponseSchema,
+  PoetSchema,
   PoetsResponseSchema,
   SearchOptionsSchema,
   SourceSchema,
   SourcesResponseSchema,
-  LocationsResponseSchema,
-  InscriptionsResponseSchema,
-  MonumentsResponseSchema,
 } from "./schemas.js";
 
 export type Poet = z.infer<typeof PoetSchema>;

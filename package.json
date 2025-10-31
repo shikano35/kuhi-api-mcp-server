@@ -5,13 +5,19 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
+    "build": "tsc && chmod +x dist/index.js && chmod +x dist/index-streamable.js",
     "clean": "rm -rf dist/*",
+    "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/index-streamable.ts",
+    "start:http": "node dist/index-streamable.js",
     "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome check --write .",
-    "check": "biome check"
+    "check": "biome check",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "inspector": "pnpm build && npx @modelcontextprotocol/inspector node dist/index.js"
   },
   "bin": {
     "kuhi-api-mcp-server": "./dist/index.js"
@@ -42,7 +48,9 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@types/node": "^22.18.0",
+    "@vitest/coverage-v8": "^2.1.8",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.8"
   }
 }
