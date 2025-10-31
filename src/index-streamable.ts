@@ -1,6 +1,6 @@
+import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { createServer } from "node:http";
 import { logger } from "./logger.js";
 import { registerAllTools } from "./server/tools/index.js";
 

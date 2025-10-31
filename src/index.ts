@@ -1,16 +1,16 @@
+import fs from "node:fs";
+import path from "node:path";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import nodeFetch, {
   Headers as NodeHeaders,
   Request as NodeRequest,
   Response as NodeResponse,
 } from "node-fetch";
-import fs from "node:fs";
-import path from "node:path";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { logger } from "./logger.js";
-import { registerAllTools } from "./server/tools/index.js";
 import { fetchMonuments } from "./api.js";
+import { logger } from "./logger.js";
 import { convertToGeoJSON } from "./server/tools/geojson.js";
+import { registerAllTools } from "./server/tools/index.js";
 
 function setupConsoleRedirection(): void {
   const redirectToStderr = (...args: readonly unknown[]): void => {

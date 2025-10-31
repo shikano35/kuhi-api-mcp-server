@@ -1,11 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { fetchAllMonuments, fetchMonumentById, fetchPoets } from "../../api.js";
 import type { Monument } from "../../types.js";
-import {
-  fetchAllMonuments,
-  fetchPoets,
-  fetchMonumentById,
-} from "../../api.js";
 
 function safeArrayAccess<T>(
   array: readonly T[] | undefined,
@@ -44,16 +40,20 @@ export function registerTourismTools(server: McpServer): void {
         .describe("地域名（例: 東海、関東甲信、北陸）"),
       season: z.string().optional().describe("季節（春/夏/秋/冬）"),
       prefecture: z.string().optional().describe("都道府県名（例: 三重県）"),
-      municipality: z
-        .string()
-        .optional()
-        .describe("市区町村名（例: 伊勢市）"),
+      municipality: z.string().optional().describe("市区町村名（例: 伊勢市）"),
       max_results: z
         .number()
         .default(10)
         .describe("最大取得件数（1-50、デフォルト: 10）"),
     },
-    async ({ poet_name, region, season, prefecture, municipality, max_results }) => {
+    async ({
+      poet_name,
+      region,
+      season,
+      prefecture,
+      municipality,
+      max_results,
+    }) => {
       let results: Monument[] = [];
       if (poet_name) {
         const allPoets = await fetchPoets();
@@ -61,7 +61,10 @@ export function registerTourismTools(server: McpServer): void {
         if (!poet) {
           return {
             content: [
-              { type: "text", text: `俳人「${poet_name}」が見つかりませんでした。名前を確認してください。` },
+              {
+                type: "text",
+                text: `俳人「${poet_name}」が見つかりませんでした。名前を確認してください。`,
+              },
             ],
           };
         }
@@ -74,15 +77,21 @@ export function registerTourismTools(server: McpServer): void {
 
       // 都道府県フィルタ
       if (prefecture) {
-        filtered = filtered.filter(m => m.locations?.some(l => l.prefecture === prefecture));
+        filtered = filtered.filter((m) =>
+          m.locations?.some((l) => l.prefecture === prefecture),
+        );
       }
       // 地域フィルタ
       if (region) {
-        filtered = filtered.filter(m => m.locations?.some(l => l.region === region));
+        filtered = filtered.filter((m) =>
+          m.locations?.some((l) => l.region === region),
+        );
       }
       // 市区町村フィルタ
       if (municipality) {
-        filtered = filtered.filter(m => m.locations?.some(l => l.municipality && l.municipality.includes(municipality)));
+        filtered = filtered.filter((m) =>
+          m.locations?.some((l) => l.municipality?.includes(municipality)),
+        );
       }
       // 季節フィルタ
       if (season) {
@@ -93,9 +102,10 @@ export function registerTourismTools(server: McpServer): void {
         );
       }
 
-      const limited = typeof max_results === "number" && isFinite(max_results)
-        ? filtered.slice(0, max_results)
-        : filtered;
+      const limited =
+        typeof max_results === "number" && Number.isFinite(max_results)
+          ? filtered.slice(0, max_results)
+          : filtered;
 
       if (limited.length === 0) {
         return {
@@ -307,7 +317,9 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
       prefecture: z
         .string()
         .optional()
-        .describe("都道府県で絞り込み（例: 三重県）。指定すると検索が高速化されます"),
+        .describe(
+          "都道府県で絞り込み（例: 三重県）。指定すると検索が高速化されます",
+        ),
     },
     async ({ latitude, longitude, radius_meters, max_results, prefecture }) => {
       try {
@@ -424,7 +436,8 @@ ${formatted}
           ],
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         const errorStack = error instanceof Error ? error.stack : "";
         return {
           content: [

@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchMonuments, fetchPoems } from "../../api.js";
 import { fetchMonumentById } from "../../api.js";
-import type { SearchOptions, Monument } from "../../types.js";
+import type { Monument, SearchOptions } from "../../types.js";
 
 export function registerSearchTools(server: McpServer): void {
   server.tool(
@@ -30,7 +30,9 @@ export function registerSearchTools(server: McpServer): void {
       let monuments: Monument[] = [];
       if (monumentIdSet.size > 0) {
         const ids = Array.from(monumentIdSet).slice(0, max);
-        const fetched = await Promise.all(ids.map((id) => fetchMonumentById(id)));
+        const fetched = await Promise.all(
+          ids.map((id) => fetchMonumentById(id)),
+        );
         monuments = fetched;
       } else {
         const searchOptions: SearchOptions = {

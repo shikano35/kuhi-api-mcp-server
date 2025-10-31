@@ -9,13 +9,13 @@ import {
   SourceSchema,
 } from "./schemas.js";
 import type {
+  InscriptionsResponse,
   Location,
   Monument,
+  PoemsResponse,
   Poet,
   SearchOptions,
   Source,
-  PoemsResponse,
-  InscriptionsResponse,
 } from "./types.js";
 
 interface CacheEntry<T> {
@@ -49,15 +49,14 @@ function getFromCache<T>(key: string): T | null {
     return null;
   }
 
-  const typedEntry = entry as CacheEntry<T>;
-  if (Date.now() - typedEntry.timestamp > CONFIG.CACHE_DURATION) {
+  if (Date.now() - entry.timestamp > CONFIG.CACHE_DURATION) {
     cache.delete(key);
-    currentCacheSize -= typedEntry.size;
+    currentCacheSize -= entry.size;
     return null;
   }
 
-  typedEntry.lastAccessed = Date.now();
-  return typedEntry.data;
+  entry.lastAccessed = Date.now();
+  return entry.data as T;
 }
 
 function setCache<T>(key: string, data: T): void {
@@ -68,7 +67,6 @@ function setCache<T>(key: string, data: T): void {
     return;
   }
 
-  // LRU eviction
   while (currentCacheSize + size > CACHE_SIZE_LIMIT && cache.size > 0) {
     let oldestKey: string | undefined;
     let oldestTime = Date.now();
@@ -84,9 +82,8 @@ function setCache<T>(key: string, data: T): void {
 
     const oldEntry = cache.get(oldestKey);
     if (oldEntry) {
-      const typedOldEntry = oldEntry as CacheEntry<unknown>;
       cache.delete(oldestKey);
-      currentCacheSize -= typedOldEntry.size;
+      currentCacheSize -= oldEntry.size;
     }
   }
 
@@ -283,7 +280,7 @@ async function fetchResource<T>(
       const validatedData = schema.parse(rawData);
       setCache(cacheKey, validatedData);
       return validatedData;
-    } catch (error) {
+    } catch (_error) {
       validationMetrics.validationFailures += 1;
       validationMetrics.lastFailureAt = new Date();
       validationMetrics.failuresByEndpoint[endpoint] =
@@ -405,7 +402,6 @@ export async function fetchAllMonuments(
   const DELAY_MS = 100;
   let offset = 0;
   let hasMore = true;
-  let totalFetched = 0;
   const DEFAULT_MAX_RESULTS =
     maxResults !== undefined ? maxResults : Number.POSITIVE_INFINITY;
 
@@ -420,15 +416,12 @@ export async function fetchAllMonuments(
       hasMore = false;
       break;
     }
-    let newCount = 0;
     for (const m of batch) {
       if (!seenIds.has(m.id)) {
         allMonuments.push(m);
         seenIds.add(m.id);
-        newCount++;
       }
     }
-    totalFetched += batch.length;
     if (allMonuments.length >= DEFAULT_MAX_RESULTS) {
       hasMore = false;
       break;
@@ -479,12 +472,14 @@ export async function fetchPoetById(id: number): Promise<Poet> {
 export async function fetchHaikuMonumentsByPoet(
   poetId: number,
 ): Promise<Monument[]> {
-  // 俳人のmonumentsエンドポイントは簡略化されたMonumentを返すため、スキーマ検証をスキップ
-  const data = await fetchResource(
+  const data = await fetchResource<Monument[]>(
     `${ENDPOINTS.POETS}/${poetId}/monuments`,
-    undefined, // スキーマ検証なし
+    undefined,
+    undefined,
+    undefined,
+    { skipValidation: true },
   );
-  return data as Monument[];
+  return data;
 }
 
 export async function fetchSources(
@@ -548,10 +543,15 @@ export async function fetchPoems(
       )
     : undefined;
 
-  const data = await fetchResource(ENDPOINTS.POEMS, z.any(), undefined, params);
+  const data = await fetchResource<PoemsResponse>(
+    ENDPOINTS.POEMS,
+    undefined,
+    undefined,
+    params,
+    { skipValidation: true },
+  );
 
-  const poemsResponse = data as PoemsResponse;
-  return poemsResponse.poems;
+  return data.poems;
 }
 
 export async function fetchInscriptions(
@@ -565,12 +565,12 @@ export async function fetchInscriptions(
       )
     : undefined;
 
-  const data = await fetchResource(
+  const data = await fetchResource<InscriptionsResponse>(
     ENDPOINTS.INSCRIPTIONS,
-    z.any(),
+    undefined,
     undefined,
     params,
+    { skipValidation: true },
   );
-  const inscriptionsResponse = data as InscriptionsResponse;
-  return inscriptionsResponse.inscriptions;
+  return data.inscriptions;
 }

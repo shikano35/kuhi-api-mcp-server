@@ -1,10 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { fetchMonuments } from "../../api.js";
 import type {
   GeoJSONFeature,
   GeoJSONFeatureCollection,
   Monument,
 } from "../../types.js";
-import { fetchMonuments } from "../../api.js";
 
 function safeArrayAccess<T>(
   array: readonly T[] | undefined,
@@ -13,7 +13,9 @@ function safeArrayAccess<T>(
   return array && array.length > index ? array[index] : undefined;
 }
 
-export function convertToGeoJSON(monuments: Monument[]): GeoJSONFeatureCollection {
+export function convertToGeoJSON(
+  monuments: Monument[],
+): GeoJSONFeatureCollection {
   const features: GeoJSONFeature[] = monuments
     .filter((monument) => monument.locations && monument.locations.length > 0)
     .map((monument) => {
