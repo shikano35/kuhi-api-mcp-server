@@ -38,3 +38,5 @@ dist/
 /output
 instructions
 CHANGELOG.md
+/docs
+.cursor
