@@ -5,8 +5,11 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
+    "build": "tsc && chmod +x dist/index.js && chmod +x dist/index-streamable.js",
     "clean": "rm -rf dist/*",
+    "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/index-streamable.ts",
+    "start:http": "node dist/index-streamable.js",
     "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
