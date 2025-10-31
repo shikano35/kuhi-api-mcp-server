@@ -1,18 +1,12 @@
 import { createServer } from "node:http";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { logger } from "./logger.js";
-import { registerAllTools } from "./server/tools/index.js";
+import { createMcpServer } from "./server/create-server.js";
 
 // biome-ignore lint/complexity/useLiteralKeys: process.env requires bracket notation for strict TypeScript
 const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
 
-const mcpServer = new McpServer({
-  name: "kuhi-api-mcp-server",
-  version: "2.0.0",
-});
-
-registerAllTools(mcpServer);
+const mcpServer = createMcpServer();
 
 const httpServer = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");

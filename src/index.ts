@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import nodeFetch, {
   Headers as NodeHeaders,
@@ -9,8 +8,8 @@ import nodeFetch, {
 } from "node-fetch";
 import { fetchMonuments } from "./api.js";
 import { logger } from "./logger.js";
+import { createMcpServer } from "./server/create-server.js";
 import { convertToGeoJSON } from "./server/tools/geojson.js";
-import { registerAllTools } from "./server/tools/index.js";
 
 function setupConsoleRedirection(): void {
   const redirectToStderr = (...args: readonly unknown[]): void => {
@@ -34,12 +33,7 @@ function setupGlobalFetch(): void {
 setupConsoleRedirection();
 setupGlobalFetch();
 
-const server = new McpServer({
-  name: "kuhi-api-mcp-server",
-  version: "2.0.0",
-});
-
-registerAllTools(server);
+const server = createMcpServer();
 
 async function generateGeoJSONFile(outputPath: string): Promise<void> {
   try {
