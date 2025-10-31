@@ -14,7 +14,10 @@
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome check --write .",
-    "check": "biome check"
+    "check": "biome check",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "inspector": "pnpm build && npx @modelcontextprotocol/inspector node dist/index.js"
   },
   "bin": {
     "kuhi-api-mcp-server": "./dist/index.js"
@@ -45,7 +48,9 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@types/node": "^22.18.0",
+    "@vitest/coverage-v8": "^2.1.8",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.8"
   }
 }
