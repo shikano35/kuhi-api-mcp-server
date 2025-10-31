@@ -401,11 +401,10 @@ export async function fetchAllMonuments(
   const BATCH_SIZE = 100;
   const DELAY_MS = 100;
   let offset = 0;
-  let hasMore = true;
   const DEFAULT_MAX_RESULTS =
     maxResults !== undefined ? maxResults : Number.POSITIVE_INFINITY;
 
-  while (hasMore) {
+  while (true) {
     const params = {
       ...options,
       limit: BATCH_SIZE,
@@ -413,7 +412,6 @@ export async function fetchAllMonuments(
     };
     const batch = await fetchMonuments(params);
     if (!batch.length) {
-      hasMore = false;
       break;
     }
     for (const m of batch) {
@@ -423,11 +421,9 @@ export async function fetchAllMonuments(
       }
     }
     if (allMonuments.length >= DEFAULT_MAX_RESULTS) {
-      hasMore = false;
       break;
     }
     if (batch.length < BATCH_SIZE) {
-      hasMore = false;
       break;
     }
     offset += BATCH_SIZE;
