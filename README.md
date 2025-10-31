@@ -166,6 +166,14 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
 pnpm run dev
 ```
 
+### MCP Inspector による検証
+
+公式の MCP Inspector を使用して、ブラウザから対話的にテストできます：
+
+```bash
+pnpm run inspector
+```
+
 ### 型チェック
 
 ```bash
