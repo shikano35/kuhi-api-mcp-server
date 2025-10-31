@@ -36,6 +36,7 @@ pids
 dist/
 /node_modules
 /output
+/coverage
 instructions
 CHANGELOG.md
 /docs
