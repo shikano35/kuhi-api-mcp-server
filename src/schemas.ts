@@ -236,6 +236,7 @@ export const SearchOptionsSchema = z.object({
   material: z.string().optional(),
   monument_type: z.string().optional(),
   prefecture: z.string().optional(),
+  municipality: z.string().optional(),
   region: z.string().optional(),
   location_id: z.number().optional(),
   bbox: z.string().optional(),
