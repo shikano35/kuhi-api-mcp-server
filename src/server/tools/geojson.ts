@@ -1,9 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { fetchMonuments } from "../../api.js";
 import type {
   GeoJSONFeature,
   GeoJSONFeatureCollection,
   Monument,
+  SearchOptions,
 } from "../../types.js";
 
 function safeArrayAccess<T>(
@@ -67,13 +69,54 @@ export function convertToGeoJSON(
 export function registerGeoJSONTools(server: McpServer): void {
   server.tool(
     "get_haiku_monuments_geojson",
-    "句碑データベースに登録されている句碑の情報をGeoJSON形式で表示（最大20件）",
-    {},
-    async () => {
-      // Cloudflareエラーを避けるため、小さな制限で取得
-      const monuments = await fetchMonuments({ limit: 20, offset: 0 });
+    "句碑データベースに登録されている句碑の情報をGeoJSON形式で表示",
+    {
+      prefecture: z
+        .string()
+        .optional()
+        .describe("都道府県名で絞り込み（例: 三重県）"),
+      municipality: z
+        .string()
+        .optional()
+        .describe("市区町村名で絞り込み（例: 桑名市）"),
+      region: z.string().optional().describe("地域名で絞り込み（例: 東海）"),
+      poet_name: z
+        .string()
+        .optional()
+        .describe("俳人名で絞り込み（例: 松尾芭蕉）"),
+      limit: z
+        .number()
+        .optional()
+        .default(50)
+        .describe("取得件数（デフォルト: 50）"),
+    },
+    async ({ prefecture, municipality, region, poet_name, limit }) => {
+      const options: SearchOptions = { limit };
+
+      if (prefecture) {
+        options.prefecture = prefecture;
+      }
+      if (municipality) {
+        options.municipality = municipality;
+      }
+      if (region) {
+        options.region = region;
+      }
+      if (poet_name) {
+        options.poet_name_contains = poet_name;
+      }
+
+      const monuments = await fetchMonuments(options);
       const geojson = convertToGeoJSON(monuments);
-      return { content: [{ type: "text", text: JSON.stringify(geojson) }] };
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(geojson, null, 2),
+          },
+        ],
+      };
     },
   );
 }

@@ -10,10 +10,10 @@ export function registerSearchTools(server: McpServer): void {
     "類似の句碑を検索",
     {
       searchText: z.string().describe("検索テキスト"),
-      limit: z.number().optional().default(5).describe("取得件数"),
+      limit: z.number().optional().default(50).describe("取得件数"),
     },
     async ({ searchText, limit }) => {
-      const max = limit ?? 5;
+      const max = limit ?? 50;
 
       const poems = await fetchPoems({ text_contains: searchText, limit: max });
 
