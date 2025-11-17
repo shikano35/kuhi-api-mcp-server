@@ -43,7 +43,6 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
 ### 観光・探索向け
 
 1. **explore_monuments_for_tourism**
-
    - 観光向けの句碑探索を支援
    - 特定の俳人、季節、地域で絞り込み可能
    - 読みやすいフォーマットで結果を返却
@@ -55,13 +54,11 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
      - `max_results` (number, default: 10) - 最大取得件数
 
 2. **learn_about_monument**
-
    - 特定の句碑について深く学ぶ
    - 関連俳人・句・背景情報を統合して提供
    - パラメータ: `id` (number) - 句碑 ID
 
 3. **discover_nearby_monuments**
-
    - 現在地周辺の句碑を発見
    - 距離順にソートして表示
    - 観光ルート計画に最適
@@ -74,14 +71,12 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
 ### 分析・統計向け
 
 4. **analyze_monuments_statistics**
-
    - データベース全体の統計分析
    - 都道府県別・地域別・俳人別・季節別の集計
    - 要約版と詳細版を選択可能
    - パラメータ: `format` ("summary" | "detailed", default: "summary")
 
 5. **compare_poets_styles**
-
    - 複数の俳人のスタイル比較分析
    - 季語や季節の使い方の傾向を比較
    - パラメータ: `poet_names` (array of strings, 2-5 名) - 俳人名の配列
@@ -89,7 +84,6 @@ AI Agent から[句碑データベース API](https://github.com/shikano35/haiku
 ### 特殊用途
 
 6. **find_similar_monuments**
-
    - 類似の句碑を検索
    - パラメータ:
      - `searchText` (string) - 検索テキスト
