@@ -7,8 +7,8 @@
   "scripts": {
     "build": "tsc && chmod +x dist/index.js && chmod +x dist/index-streamable.js",
     "clean": "rm -rf dist/*",
-    "dev": "tsx src/index.ts",
-    "dev:http": "tsx src/index-streamable.ts",
+    "dev": "tsx src/index-streamable.ts",
+    "dev:stdio": "tsx src/index.ts",
     "start:http": "node dist/index-streamable.js",
     "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
@@ -37,7 +37,9 @@
     "kuhi"
   ],
   "module": "./dist/index.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "packageManager": "pnpm@10.7.1",
   "dependencies": {
