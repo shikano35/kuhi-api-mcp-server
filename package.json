@@ -7,8 +7,8 @@
   "scripts": {
     "build": "tsc && chmod +x dist/index.js && chmod +x dist/index-streamable.js",
     "clean": "rm -rf dist/*",
-    "dev": "tsx src/index.ts",
-    "dev:http": "tsx src/index-streamable.ts",
+    "dev": "tsx src/index-streamable.ts",
+    "dev:stdio": "tsx src/index.ts",
     "start:http": "node dist/index-streamable.js",
     "type-check": "tsc --noEmit",
     "lint": "biome lint --write .",
@@ -52,6 +52,6 @@
     "msw": "^2.11.6",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.0.9"
   }
 }

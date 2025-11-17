@@ -42,3 +42,4 @@ CHANGELOG.md
 /docs
 .cursor
 evaluation
+package-lock.json
