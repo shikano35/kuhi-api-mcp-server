@@ -9,7 +9,9 @@ async function fetchMonumentsSafely(ids: number[]): Promise<Monument[]> {
     return [];
   }
 
-  const settled = await Promise.allSettled(ids.map((id) => fetchMonumentById(id)));
+  const settled = await Promise.allSettled(
+    ids.map((id) => fetchMonumentById(id)),
+  );
   const successful: Monument[] = [];
 
   for (const result of settled) {
@@ -39,7 +41,9 @@ function extractSearchTerms(raw: string): string[] {
     terms.add(term);
   }
 
-  const scriptMatches = normalized.match(/([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|\p{Number}){2,}/gu);
+  const scriptMatches = normalized.match(
+    /([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|\p{Number}){2,}/gu,
+  );
   if (scriptMatches) {
     for (const match of scriptMatches) {
       const trimmed = match.trim();
@@ -120,9 +124,7 @@ async function fetchMonumentsByInscriptionTerms(
   }
 
   const searchResults = await Promise.allSettled(
-    terms.map((term) =>
-      fetchMonuments({ inscription_contains: term, limit }),
-    ),
+    terms.map((term) => fetchMonuments({ inscription_contains: term, limit })),
   );
 
   const aggregated = new Map<number, Monument>();
@@ -176,7 +178,8 @@ export function registerSearchTools(server: McpServer): void {
           const fallbackMonuments = await fetchMonuments({ limit: max });
           mergeMonuments(aggregatedMonuments, fallbackMonuments);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           return {
             content: [
               {

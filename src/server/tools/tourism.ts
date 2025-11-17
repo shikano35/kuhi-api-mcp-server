@@ -38,7 +38,7 @@ function scoreLocationMatch(location: Location, query: string): number {
     }
   }
 
-  if (location.address && location.address.includes(query)) {
+  if (location.address?.includes(query)) {
     score += 3;
   }
 
@@ -75,8 +75,7 @@ async function resolveCoordinatesFromQuery(
   const scored = candidates
     .filter(
       (location) =>
-        isFiniteNumber(location.latitude) &&
-        isFiniteNumber(location.longitude),
+        isFiniteNumber(location.latitude) && isFiniteNumber(location.longitude),
     )
     .map((location) => ({
       location,
@@ -93,7 +92,10 @@ async function resolveCoordinatesFromQuery(
     latitude: best.location.latitude as number,
     longitude: best.location.longitude as number,
     ...(best.location.place_name || best.location.address
-      ? { label: best.location.place_name ?? best.location.address ?? normalized }
+      ? {
+          label:
+            best.location.place_name ?? best.location.address ?? normalized,
+        }
       : {}),
     ...(best.location.prefecture
       ? { prefecture: best.location.prefecture }
@@ -105,9 +107,7 @@ async function resolveCoordinatesFromQuery(
 }
 
 function normalizePoetText(value: string): string {
-  return value
-    .replace(/[「」『』（）()【】\s・,，、]/gu, "")
-    .toLowerCase();
+  return value.replace(/[「」『』（）()【】\s・,，、]/gu, "").toLowerCase();
 }
 
 function findPoetByFlexibleName(
@@ -477,7 +477,8 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
         let resolvedLabel: string | undefined;
 
         if (
-          (!isFiniteNumber(centerLatitude) || !isFiniteNumber(centerLongitude)) &&
+          (!isFiniteNumber(centerLatitude) ||
+            !isFiniteNumber(centerLongitude)) &&
           place_query
         ) {
           const resolved = await resolveCoordinatesFromQuery(
@@ -496,7 +497,10 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
           }
         }
 
-        if (!isFiniteNumber(centerLatitude) || !isFiniteNumber(centerLongitude)) {
+        if (
+          !isFiniteNumber(centerLatitude) ||
+          !isFiniteNumber(centerLongitude)
+        ) {
           throw new Error(
             "緯度・経度、もしくは地点名(place_query)を指定してください",
           );
@@ -564,7 +568,9 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
 
         if (limited.length === 0) {
           const centerDescription =
-            resolvedLabel ?? place_query ?? `緯度${centerLatitude}, 経度${centerLongitude}`;
+            resolvedLabel ??
+            place_query ??
+            `緯度${centerLatitude}, 経度${centerLongitude}`;
 
           return {
             content: [
@@ -577,7 +583,9 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
         }
 
         const centerDescription =
-          resolvedLabel ?? place_query ?? `緯度 ${centerLatitude}, 経度 ${centerLongitude}`;
+          resolvedLabel ??
+          place_query ??
+          `緯度 ${centerLatitude}, 経度 ${centerLongitude}`;
 
         const formatted = limited
           .map((item, index) => {

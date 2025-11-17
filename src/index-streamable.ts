@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage } from "node:http";
+import { type IncomingMessage, createServer } from "node:http";
 import { URL } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { logger } from "./logger.js";
@@ -7,6 +7,7 @@ import { createMcpServer } from "./server/create-server.js";
 
 // biome-ignore lint/complexity/useLiteralKeys: process.env requires bracket notation for strict TypeScript
 const PORT = Number.parseInt(process.env["PORT"] ?? "8786", 10);
+// biome-ignore lint/complexity/useLiteralKeys: process.env requires bracket notation for strict TypeScript
 const HTTP_PATH = process.env["MCP_HTTP_PATH"] ?? "/mcp";
 
 function buildRequestUrl(req: IncomingMessage): URL {
