@@ -30,7 +30,7 @@ function extractSearchTerms(raw: string): string[] {
   }
 
   const punctuationSeparated = normalized
-    .replace(/[、。,，．。!?！？\n\r\t]+/gu, " ")
+    .replace(/[、。,，．!?！？\n\r\t]+/gu, " ")
     .split(/\s+/u)
     .map((term) => term.trim())
     .filter((term) => term.length >= 2 && term.length <= 30);
