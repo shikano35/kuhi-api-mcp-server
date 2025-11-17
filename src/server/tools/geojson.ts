@@ -67,28 +67,31 @@ export function convertToGeoJSON(
 }
 
 export function registerGeoJSONTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "get_haiku_monuments_geojson",
-    "句碑データベースに登録されている句碑の情報をGeoJSON形式で表示",
     {
-      prefecture: z
-        .string()
-        .optional()
-        .describe("都道府県名で絞り込み（例: 三重県）"),
-      municipality: z
-        .string()
-        .optional()
-        .describe("市区町村名で絞り込み（例: 桑名市）"),
-      region: z.string().optional().describe("地域名で絞り込み（例: 東海）"),
-      poet_name: z
-        .string()
-        .optional()
-        .describe("俳人名で絞り込み（例: 松尾芭蕉）"),
-      limit: z
-        .number()
-        .optional()
-        .default(50)
-        .describe("取得件数（デフォルト: 50）"),
+      description:
+        "句碑データベースに登録されている句碑の情報をGeoJSON形式で表示",
+      inputSchema: z.object({
+        prefecture: z
+          .string()
+          .optional()
+          .describe("都道府県名で絞り込み（例: 三重県）"),
+        municipality: z
+          .string()
+          .optional()
+          .describe("市区町村名で絞り込み（例: 桑名市）"),
+        region: z.string().optional().describe("地域名で絞り込み（例: 東海）"),
+        poet_name: z
+          .string()
+          .optional()
+          .describe("俳人名で絞り込み（例: 松尾芭蕉）"),
+        limit: z
+          .number()
+          .optional()
+          .default(50)
+          .describe("取得件数（デフォルト: 50）"),
+      }),
     },
     async ({ prefecture, municipality, region, poet_name, limit }) => {
       const options: SearchOptions = { limit };

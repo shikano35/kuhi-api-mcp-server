@@ -1,7 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { fetchAllMonuments, fetchMonumentById, fetchPoets } from "../../api.js";
-import type { Monument } from "../../types.js";
+import {
+  fetchAllMonuments,
+  fetchLocations,
+  fetchMonumentById,
+  fetchPoets,
+} from "../../api.js";
+import type { Location, Monument, SearchOptions } from "../../types.js";
 
 function safeArrayAccess<T>(
   array: readonly T[] | undefined,
@@ -10,10 +15,125 @@ function safeArrayAccess<T>(
   return array && array.length > index ? array[index] : undefined;
 }
 
+interface ResolvedCoordinates {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly label?: string;
+  readonly prefecture?: string;
+  readonly municipality?: string;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function scoreLocationMatch(location: Location, query: string): number {
+  const normalizedQuery = query.replace(/\s+/gu, "");
+  let score = 0;
+
+  if (location.place_name) {
+    const place = location.place_name.replace(/\s+/gu, "");
+    if (place && normalizedQuery.includes(place)) {
+      score += 5;
+    }
+  }
+
+  if (location.address && location.address.includes(query)) {
+    score += 3;
+  }
+
+  if (location.municipality && query.includes(location.municipality)) {
+    score += 2;
+  }
+
+  if (location.prefecture && query.includes(location.prefecture)) {
+    score += 1;
+  }
+
+  return score;
+}
+
+async function resolveCoordinatesFromQuery(
+  query: string,
+  prefecture?: string,
+): Promise<ResolvedCoordinates | null> {
+  const normalized = query.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const params: Partial<SearchOptions> = {
+    search: normalized,
+    limit: 10,
+  };
+
+  if (prefecture) {
+    params.prefecture = prefecture;
+  }
+
+  const candidates = await fetchLocations(params).catch(() => []);
+  const scored = candidates
+    .filter(
+      (location) =>
+        isFiniteNumber(location.latitude) &&
+        isFiniteNumber(location.longitude),
+    )
+    .map((location) => ({
+      location,
+      score: scoreLocationMatch(location, normalized),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = scored[0];
+  if (!best || best.score <= 0) {
+    return null;
+  }
+
+  return {
+    latitude: best.location.latitude as number,
+    longitude: best.location.longitude as number,
+    ...(best.location.place_name || best.location.address
+      ? { label: best.location.place_name ?? best.location.address ?? normalized }
+      : {}),
+    ...(best.location.prefecture
+      ? { prefecture: best.location.prefecture }
+      : {}),
+    ...(best.location.municipality
+      ? { municipality: best.location.municipality }
+      : {}),
+  };
+}
+
+function normalizePoetText(value: string): string {
+  return value
+    .replace(/[「」『』（）()【】\s・,，、]/gu, "")
+    .toLowerCase();
+}
+
+function findPoetByFlexibleName(
+  poets: readonly { name: string; id: number }[],
+  query: string,
+) {
+  const normalizedQuery = normalizePoetText(query);
+  if (!normalizedQuery) {
+    return undefined;
+  }
+
+  return poets.find((poet) => {
+    const normalizedName = normalizePoetText(poet.name);
+    return (
+      normalizedName === normalizedQuery ||
+      normalizedName.includes(normalizedQuery) ||
+      normalizedQuery.includes(normalizedName)
+    );
+  });
+}
+
 export function registerTourismTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "explore_monuments_for_tourism",
-    `観光向けの句碑探索を支援します。
+    {
+      description: `観光向けの句碑探索を支援します。
 
 このToolは以下のユーザーの意図に対応します：
 - 特定の俳人の句碑を観光したい
@@ -29,22 +149,26 @@ export function registerTourismTools(server: McpServer): void {
 - 松尾芭蕉の句碑を東海地方で3件探す
 - 冬の句碑を北陸で観光ルートとして提案
 - 山口誓子の句碑を春に訪れたい`,
-    {
-      poet_name: z
-        .string()
-        .optional()
-        .describe("俳人名（例: 松尾芭蕉、山口誓子）"),
-      region: z
-        .string()
-        .optional()
-        .describe("地域名（例: 東海、関東甲信、北陸）"),
-      season: z.string().optional().describe("季節（春/夏/秋/冬）"),
-      prefecture: z.string().optional().describe("都道府県名（例: 三重県）"),
-      municipality: z.string().optional().describe("市区町村名（例: 伊勢市）"),
-      max_results: z
-        .number()
-        .default(10)
-        .describe("最大取得件数（1-50、デフォルト: 10）"),
+      inputSchema: z.object({
+        poet_name: z
+          .string()
+          .optional()
+          .describe("俳人名（例: 松尾芭蕉、山口誓子）"),
+        region: z
+          .string()
+          .optional()
+          .describe("地域名（例: 東海、関東甲信、北陸）"),
+        season: z.string().optional().describe("季節（春/夏/秋/冬）"),
+        prefecture: z.string().optional().describe("都道府県名（例: 三重県）"),
+        municipality: z
+          .string()
+          .optional()
+          .describe("市区町村名（例: 伊勢市）"),
+        max_results: z
+          .number()
+          .default(10)
+          .describe("最大取得件数（1-50、デフォルト: 10）"),
+      }),
     },
     async ({
       poet_name,
@@ -57,7 +181,7 @@ export function registerTourismTools(server: McpServer): void {
       let results: Monument[] = [];
       if (poet_name) {
         const allPoets = await fetchPoets();
-        const poet = allPoets.find((p) => p.name.includes(poet_name));
+        const poet = findPoetByFlexibleName(allPoets, poet_name);
         if (!poet) {
           return {
             content: [
@@ -157,9 +281,10 @@ export function registerTourismTools(server: McpServer): void {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "learn_about_monument",
-    `特定の句碑について深く理解するための詳細情報を提供します。
+    {
+      description: `特定の句碑について深く理解するための詳細情報を提供します。
 
 このToolは以下のユーザーの意図に対応します：
 - 句碑の背景や歴史を知りたい
@@ -177,12 +302,13 @@ export function registerTourismTools(server: McpServer): void {
 使用例:
 - 「本統寺 句碑（松尾芭蕉）」の詳細が知りたい場合、まず explore_monuments_for_tourism で検索してIDを取得
 - IDが判明している場合（例: monument_id=1）の詳細情報取得`,
-    {
-      monument_id: z
-        .number()
-        .describe(
-          "句碑ID（数値）。IDが不明な場合は explore_monuments_for_tourism で先に検索してください",
-        ),
+      inputSchema: z.object({
+        monument_id: z
+          .number()
+          .describe(
+            "句碑ID（数値）。IDが不明な場合は explore_monuments_for_tourism で先に検索してください",
+          ),
+      }),
     },
     async ({ monument_id }) => {
       const monument = await fetchMonumentById(monument_id);
@@ -286,9 +412,10 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
     },
   );
 
-  server.tool(
+  server.registerTool(
     "discover_nearby_monuments",
-    `現在地や指定した場所の周辺にある句碑を発見します。
+    {
+      description: `現在地や指定した場所の周辺にある句碑を発見します。
 
 このToolは以下のユーザーの意図に対応します：
 - 今いる場所の近くにある句碑を見つけたい
@@ -303,30 +430,82 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
 使用例:
 - 緯度35.065502、経度136.692193の周辺1km以内の句碑
 - 桑名市周辺の句碑を探す（座標で指定）`,
-    {
-      latitude: z.number().describe("緯度（-90〜90）"),
-      longitude: z.number().describe("経度（-180〜180）"),
-      radius_meters: z
-        .number()
-        .default(1000)
-        .describe("検索半径（メートル、デフォルト: 1000m）"),
-      max_results: z
-        .number()
-        .default(5)
-        .describe("最大取得件数（デフォルト: 5件）"),
-      prefecture: z
-        .string()
-        .optional()
-        .describe(
-          "都道府県で絞り込み（例: 三重県）。指定すると検索が高速化されます",
-        ),
+      inputSchema: z.object({
+        latitude: z
+          .number()
+          .min(-90)
+          .max(90)
+          .optional()
+          .describe("緯度（-90〜90）"),
+        longitude: z
+          .number()
+          .min(-180)
+          .max(180)
+          .optional()
+          .describe("経度（-180〜180）"),
+        radius_meters: z
+          .number()
+          .default(1000)
+          .describe("検索半径（メートル、デフォルト: 1000m）"),
+        max_results: z
+          .number()
+          .default(5)
+          .describe("最大取得件数（デフォルト: 5件）"),
+        prefecture: z
+          .string()
+          .optional()
+          .describe(
+            "都道府県で絞り込み（例: 三重県）。指定すると検索が高速化されます",
+          ),
+        place_query: z
+          .string()
+          .optional()
+          .describe("地点名やランドマーク（例: 金沢駅、兼六園）"),
+      }),
     },
-    async ({ latitude, longitude, radius_meters, max_results, prefecture }) => {
+    async ({
+      latitude,
+      longitude,
+      radius_meters = 1000,
+      max_results = 5,
+      prefecture,
+      place_query,
+    }) => {
       try {
-        if (latitude < -90 || latitude > 90) {
+        let centerLatitude = latitude;
+        let centerLongitude = longitude;
+        let resolvedLabel: string | undefined;
+
+        if (
+          (!isFiniteNumber(centerLatitude) || !isFiniteNumber(centerLongitude)) &&
+          place_query
+        ) {
+          const resolved = await resolveCoordinatesFromQuery(
+            place_query,
+            prefecture,
+          );
+          if (resolved) {
+            centerLatitude = resolved.latitude;
+            centerLongitude = resolved.longitude;
+            resolvedLabel = resolved.label;
+            prefecture = prefecture ?? resolved.prefecture ?? prefecture;
+          } else {
+            throw new Error(
+              `指定された場所「${place_query}」を特定できませんでした。緯度・経度を直接入力してください。`,
+            );
+          }
+        }
+
+        if (!isFiniteNumber(centerLatitude) || !isFiniteNumber(centerLongitude)) {
+          throw new Error(
+            "緯度・経度、もしくは地点名(place_query)を指定してください",
+          );
+        }
+
+        if (centerLatitude < -90 || centerLatitude > 90) {
           throw new Error("緯度は-90から90の範囲で指定してください");
         }
-        if (longitude < -180 || longitude > 180) {
+        if (centerLongitude < -180 || centerLongitude > 180) {
           throw new Error("経度は-180から180の範囲で指定してください");
         }
         if (radius_meters <= 0) {
@@ -368,8 +547,8 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
           if (!location?.latitude || !location?.longitude) continue;
 
           const distance = calculateDistance(
-            latitude,
-            longitude,
+            centerLatitude,
+            centerLongitude,
             location.latitude,
             location.longitude,
           );
@@ -384,15 +563,21 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
         const limited = nearby.slice(0, max_results);
 
         if (limited.length === 0) {
+          const centerDescription =
+            resolvedLabel ?? place_query ?? `緯度${centerLatitude}, 経度${centerLongitude}`;
+
           return {
             content: [
               {
                 type: "text",
-                text: `指定された地点（緯度${latitude}, 経度${longitude}）から半径${radius_meters}m以内に句碑は見つかりませんでした。\n\n半径を広げて再検索してください。`,
+                text: `指定された地点（${centerDescription}）から半径${radius_meters}m以内に句碑は見つかりませんでした。\n\n半径を広げて再検索してください。`,
               },
             ],
           };
         }
+
+        const centerDescription =
+          resolvedLabel ?? place_query ?? `緯度 ${centerLatitude}, 経度 ${centerLongitude}`;
 
         const formatted = limited
           .map((item, index) => {
@@ -424,7 +609,7 @@ ${source.url ? `- **URL**: ${source.url}` : ""}
               type: "text",
               text: `# 周辺の句碑（${limited.length}件）
 
-基準地点: 緯度 ${latitude}, 経度 ${longitude}
+基準地点: ${centerDescription}
 検索半径: ${radius_meters}m
 
 ${formatted}
@@ -438,12 +623,11 @@ ${formatted}
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        const errorStack = error instanceof Error ? error.stack : "";
         return {
           content: [
             {
               type: "text",
-              text: `エラーが発生しました:\n${errorMessage}\n\nStack trace:\n${errorStack}`,
+              text: `エラー: ${errorMessage}`,
             },
           ],
         };
@@ -451,9 +635,10 @@ ${formatted}
     },
   );
 
-  server.tool(
+  server.registerTool(
     "analyze_monuments_statistics",
-    `句碑データベースの包括的な統計分析を提供します。
+    {
+      description: `句碑データベースの包括的な統計分析を提供します。
 
 このToolは以下のユーザーの意図に対応します：
 - データベース全体の句碑分布を把握したい
@@ -472,11 +657,12 @@ ${formatted}
 - どの地域に句碑が多いか調べる
 - 春の句碑が多い都道府県を見つける
 - 特定の俳人の作品数を確認する`,
-    {
-      format: z
-        .enum(["summary", "detailed"])
-        .default("summary")
-        .describe("表示形式: summary=要約, detailed=詳細"),
+      inputSchema: z.object({
+        format: z
+          .enum(["summary", "detailed"])
+          .default("summary")
+          .describe("表示形式: summary=要約, detailed=詳細"),
+      }),
     },
     async ({ format }) => {
       const monuments = await fetchAllMonuments();
@@ -592,9 +778,10 @@ ${sortedSeasons.map(([season, count]) => `- ${season}: ${count}基`).join("\n")}
     },
   );
 
-  server.tool(
+  server.registerTool(
     "compare_poets_styles",
-    `複数の俳人の作風や特徴を比較分析します。
+    {
+      description: `複数の俳人の作風や特徴を比較分析します。
 
 このToolは以下のユーザーの意図に対応します：
 - 複数の俳人のスタイルの違いを知りたい
@@ -613,12 +800,13 @@ ${sortedSeasons.map(([season, count]) => `- ${season}: ${count}基`).join("\n")}
 - 松尾芭蕉と与謝蕪村の作風を比較
 - 山口誓子と久保田万太郎の季語の違いを調べる
 - 東海地方で活動した俳人を比較`,
-    {
-      poet_names: z
-        .array(z.string())
-        .min(2)
-        .max(5)
-        .describe("比較する俳人名の配列（2-5名）"),
+      inputSchema: z.object({
+        poet_names: z
+          .array(z.string())
+          .min(2)
+          .max(5)
+          .describe("比較する俳人名の配列（2-5名）"),
+      }),
     },
     async ({ poet_names }) => {
       const allPoets = await fetchPoets();
