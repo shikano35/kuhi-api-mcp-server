@@ -44,6 +44,15 @@ export const SourceSchema = z.object({
   updated_at: TimestampSchema,
 });
 
+// GeoJSON Point スキーマ
+const GeoJsonPointSchema = z.object({
+  type: z.literal("Point"),
+  coordinates: z.tuple([z.number(), z.number()]), // [longitude, latitude]
+});
+
+// GeoJSON スキーマ
+const GeoJsonSchema = GeoJsonPointSchema.nullable().optional();
+
 // 場所のスキーマ
 export const LocationSchema = z.object({
   id: IdSchema,
@@ -68,7 +77,7 @@ export const LocationSchema = z.object({
   accuracy_m: OptionalNumberSchema,
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
-  geojson: OptionalStringSchema,
+  geojson: GeoJsonSchema,
 });
 
 // 俳句のスキーマ
