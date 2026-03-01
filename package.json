@@ -37,21 +37,19 @@
     "kuhi"
   ],
   "module": "./dist/index.js",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "license": "MIT",
   "packageManager": "pnpm@10.7.1",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "node-fetch": "^3.3.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-    "@types/node": "^22.19.7",
+    "@types/node": "^22.19.13",
     "@vitest/coverage-v8": "^2.1.9",
-    "msw": "^2.12.7",
+    "msw": "^2.12.10",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

@@ -22,6 +22,7 @@ async function startServer() {
     sessionIdGenerator: () => randomUUID(),
   });
 
+  // @ts-expect-error - MCP SDK型定義の互換性問題を回避
   await mcpServer.connect(transport);
 
   const httpServer = createServer(async (req, res) => {
