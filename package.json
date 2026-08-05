@@ -16,7 +16,11 @@
     "format:check": "biome check --write .",
     "check": "biome check",
     "test": "vitest",
+    "test:ci": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "audit": "pnpm audit --audit-level=moderate",
+    "audit:fix": "pnpm audit --fix",
+    "verify": "pnpm run check && pnpm run type-check && pnpm run test:ci && pnpm run build",
     "inspector": "pnpm build && npx @modelcontextprotocol/inspector node dist/index.js"
   },
   "bin": {
@@ -37,28 +41,34 @@
     "kuhi"
   ],
   "module": "./dist/index.js",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "license": "MIT",
   "packageManager": "pnpm@10.7.1",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "node-fetch": "^3.3.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-    "@types/node": "^22.19.15",
-    "@vitest/coverage-v8": "^2.1.9",
-    "msw": "^2.12.14",
-    "tsx": "^4.21.0",
+    "@types/node": "^22.19.17",
+    "@vitest/coverage-v8": "^4.1.10",
+    "msw": "^2.15.0",
+    "tsx": "^4.23.6",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.2"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
   },
   "pnpm": {
     "overrides": {
-      "hono": ">=4.11.7"
+      "hono": ">=4.12.34",
+      "@hono/node-server": ">=2.0.5",
+      "fast-uri": "^3.1.5",
+      "ip-address": ">=10.3.1",
+      "qs": ">=6.15.2",
+      "body-parser": ">=2.3.0",
+      "postcss": ">=8.5.23",
+      "esbuild": ">=0.28.1"
     }
   }
 }
